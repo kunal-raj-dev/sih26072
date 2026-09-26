@@ -1,0 +1,68 @@
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+
+# --- Tooling state (ZCode plugins etc.) ---
+.mimosa/
+
+# --- Secrets & environment ---
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+credentials*.json
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.ipynb_checkpoints/
+
+# --- ML artifacts (weights never belong in git) ---
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.pb
+mlruns/
+lightning_logs/
+wandb/
+
+# --- Data (large files stay out of git; use DVC/LFS if needed later) ---
+data/raw/
+data/interim/
+data/processed/
+data/external/
+*.nc
+*.grib
+*.grib2
+*.zarr
+*.hdf5
+*.h5
+*.npz
+*.parquet
+
+# --- Node / frontend ---
+node_modules/
+.next/
+out/
+.nuxt/
+*.log
+npm-debug.log*
+yarn-error.log*
+.pnpm-store/
