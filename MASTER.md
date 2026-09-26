@@ -4,6 +4,9 @@
 **AIML-based Nowcasting of Thunderstorm and Lightning using atmospheric observation (multiple radars, satellite, lightning, model data)**
 **Working name:** Project Vajra (temporary)
 
+**Current phase:** Phase 0 (research) ✅ complete — deliverables D1–D12 in `docs/research/`.
+**Next:** Phase 1 — Data Foundation (D7); file access requests B-1 (MOSDAC privileged) and B-2 (IITM ILLN) on day 1.
+
 This is the single source of truth. Any agent or teammate should be able to read this
 file and learn WHAT we are building, WHY, HOW it works, WHAT evidence supports it,
 and WHAT remains uncertain. Research deliverables live in `docs/research/` (D1–D12);
@@ -123,5 +126,10 @@ Full matrix: **D2** (Deliverable 2) with physical + access tables and verificati
 
 ## 17. Current Implementation State
 
-- **2026-09-27 (later):** Phase 0 research executed (5 parallel tracks, ~270 tool calls, fetch-verified). Deliverables D1–D12 written under `docs/research/`. Data-access reality established (D2); target, model strategy, architecture, MVP, roadmap decided (§2, §7, §6, §11, §12). No code yet — Phase 1 (data foundation) is next; B-1 (MOSDAC privileged) and B-2 (IITM ILLN) requests should be filed on day 1 of Phase 1.
+- **2026-09-27 (Phase 0 closeout):** Research executed (5 parallel tracks, ~270 tool calls,
+  fetch-verified; two load-bearing claims re-verified independently: MOSDAC access tiers,
+  ECMWF Open Data licence). Deliverables D1–D12 committed (`1b1171f`) under `docs/research/`;
+  README refreshed to post-research state. Decisions D1–D10 logged. No implementation code yet.
+- **Next:** Phase 1 — Data Foundation (D7): SEVIR download, MOSDAC archive pull via `mdapi.py`,
+  GFS/ECMWF/ERA5/IMERG/LIS fetchers, evaluation harness. Day-1 external actions: B-1, B-2.
 - **2026-09-27 (early):** repository initialized; brief archived; MASTER skeleton created.
