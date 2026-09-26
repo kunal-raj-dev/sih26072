@@ -16,9 +16,22 @@ India does not have today: IMD nowcasts are 3-hourly district-level text, and ex
 
 | | |
 |---|---|
-| **Phase 0 — Research & problem definition** | ✅ **Complete (2026-09-27).** Five research tracks, fetch-verified data-access findings, 12 deliverables in [docs/research/](docs/research/). |
-| **Phase 1 — Data Foundation** | ⏭️ **Next.** Day-1 external actions: file MOSDAC privileged-access request (backlog B-1) and IITM lightning-data request (B-2). |
-| **Implementation code** | None yet — by design. Stack and architecture are decided ([MASTER.md](MASTER.md) §6, §13). |
+| **Phase 0 — Research & problem definition** | ✅ Complete (2026-09-27). Five research tracks, fetch-verified data-access findings, 12 deliverables in [docs/research/](docs/research/). |
+| **Implementation (MVP system)** | ✅ **Built and running** — full pipeline, API, decision-support UI, tests. See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) and [MASTER.md](MASTER.md) §17. |
+| **Measured result (real data)** | On a held-out real SEVIR event (43,901 GLM flashes): calibrated XGBoost fusion **BSS +0.50, POD 0.52, FAR 0.08** vs climatology; classical baselines on the same event score **negative skill** (BSS −0.23/−0.55, FAR 0.75+). Evidence, not claims — rerun with `scripts/train_model.py` + the UI scoreboard. |
+| **Remaining blockers** | Numeric Indian radar / ILLN flashes / IMD-GFS GRIB / MOSDAC NRT — all documented in MASTER.md §5; the system reports them as UNAVAILABLE rather than faking them. |
+
+## Quick start
+
+```bash
+python -m venv .venv && .venv/Scripts/pip install -e .        # (Windows Git Bash)
+python scripts/prepare_sevir_events.py --n 8                   # cache real replay events (~10 MB each)
+python scripts/train_model.py --train 4 --cal 1 --test 1       # train + calibrate + hold out test event
+python -m uvicorn vajra.api.app:app --port 8000                # open http://localhost:8000
+```
+
+`docker compose up --build` does the same in a container. The UI auto-runs the
+labelled SIMULATION event on first load; SEVIR events appear as REPLAY.
 
 ## What the research found (headline)
 

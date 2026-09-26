@@ -7,6 +7,12 @@ desktop.ini
 
 # --- Tooling state (ZCode plugins etc.) ---
 .mimosa/
+.playwright-mcp/
+
+# --- Build/runtime artifacts ---
+store/
+models/
+*.log
 
 # --- Secrets & environment ---
 .env

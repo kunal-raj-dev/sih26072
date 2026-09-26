@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Project Vajra — Thunderstorm & Lightning Nowcast</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>⚡</text></svg>" />
+<link rel="stylesheet" href="/vendor/maplibre-gl.css" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<header id="topbar">
+  <div class="brand">
+    <span class="logo">⚡</span>
+    <div>
+      <h1>Project Vajra</h1>
+      <div class="subtitle">Thunderstorm &amp; Lightning Nowcasting · SIH 2026 PS 26072 (MoES/IMD)</div>
+    </div>
+  </div>
+  <div class="badges">
+    <span id="mode-badge" class="badge badge-mode" title="Data mode of the displayed forecast">—</span>
+    <span id="rung-badge" class="badge" title="Active model rung (fallback ladder)">—</span>
+    <span id="conf-badge" class="badge" title="Overall confidence (documented heuristic)">—</span>
+  </div>
+</header>
+
+<main id="layout">
+  <aside id="left">
+    <section class="panel">
+      <h2>Event</h2>
+      <select id="event-select" aria-label="Select replay event"></select>
+      <button id="run-btn" class="primary">Run nowcast replay</button>
+      <div id="run-status" class="muted small">Select an event and run the replay. Replay data is real historical data; simulated events are labelled SIMULATION.</div>
+    </section>
+
+    <section class="panel">
+      <h2>Replay timeline</h2>
+      <div class="time-row">
+        <button id="prev-btn" aria-label="Previous step">◀</button>
+        <button id="play-btn" aria-label="Play">▶</button>
+        <button id="next-btn" aria-label="Next step">▶▶</button>
+        <span id="clock" class="clock">—</span>
+      </div>
+      <input id="timeline" type="range" min="0" max="0" value="0" aria-label="Timeline scrubber" />
+      <div class="lead-row">
+        <label>Lead:
+          <select id="lead-select" aria-label="Forecast lead">
+            <option value="30">+30 min</option>
+            <option value="60" selected>+60 min</option>
+          </select>
+        </label>
+        <label class="chk"><input type="checkbox" id="show-actual" checked /> actual flashes</label>
+      </div>
+      <div id="cycle-note" class="muted small"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Layers</h2>
+      <label class="chk"><input type="checkbox" id="lyr-prob" checked /> Forecast flash probability</label>
+      <label class="chk"><input type="checkbox" id="lyr-obs" checked /> Observation field</label>
+      <label class="chk"><input type="checkbox" id="lyr-cells" checked /> Storm cells</label>
+      <label class="chk"><input type="checkbox" id="lyr-flashes" checked /> Lightning flashes</label>
+      <label class="chk"><input type="checkbox" id="lyr-live" /> IMD radar (LIVE, visual only)</label>
+      <div class="station-row">
+        <select id="station-select" aria-label="IMD radar station">
+          <option value="delhi">Delhi</option><option value="patna">Patna</option>
+          <option value="kolkata">Kolkata</option><option value="lucknow">Lucknow</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Verification <span class="muted small">(this run, vs actual)</span></h2>
+      <table id="verif-table" class="verif">
+        <thead><tr><th>Lead</th><th>n</th><th>POD</th><th>FAR</th><th>CSI</th><th>BSS</th></tr></thead>
+        <tbody><tr><td colspan="6" class="muted">run a replay</td></tr></tbody>
+      </table>
+      <div class="muted small">Metrics computed against actual GLM flashes after issue time. BSS vs climatology.</div>
+    </section>
+  </aside>
+
+  <div id="map"></div>
+
+  <aside id="right">
+    <section class="panel">
+      <h2>Alert center</h2>
+      <div class="preset-row">
+        Preset:
+        <select id="preset-select" aria-label="Alert preset">
+          <option value="operational">Operational (balanced)</option>
+          <option value="protective">Protective (high POD)</option>
+        </select>
+      </div>
+      <div id="alerts-list" class="alerts"><div class="muted">no alerts</div></div>
+    </section>
+
+    <section class="panel">
+      <h2>Data health</h2>
+      <div id="data-health" class="health"><span class="muted">—</span></div>
+    </section>
+
+    <section class="panel">
+      <h2>Legend</h2>
+      <div class="legend">
+        <div><span class="sw" style="background:rgba(250,204,21,0.75)"></span> MODERATE ≥ 0.20</div>
+        <div><span class="sw" style="background:rgba(249,115,22,0.8)"></span> ELEVATED ≥ 0.40</div>
+        <div><span class="sw" style="background:rgba(239,68,68,0.85)"></span> HIGH ≥ 0.60</div>
+        <div><span class="sw" style="background:rgba(168,0,230,0.9)"></span> SEVERE ≥ 0.80</div>
+        <div><span class="sw" style="background:rgba(220,220,220,0.6)"></span> observation field (grey)</div>
+        <div><span class="sw sw-dot"></span> actual GLM flash</div>
+      </div>
+      <div class="muted small">Bands are configurable defaults — not validated IMD operational thresholds.</div>
+    </section>
+  </aside>
+</main>
+
+<footer id="footer">
+  <span id="honesty-note">
+    Every forecast carries its data mode (LIVE / REPLAY / SIMULATION), the model rung actually used,
+    and its input health. Nothing on this map is simulated unless labelled.
+  </span>
+</footer>
+
+<script src="/vendor/maplibre-gl.js?v=3"></script>
+<script src="/app.js?v=3"></script>
+</body>
+</html>

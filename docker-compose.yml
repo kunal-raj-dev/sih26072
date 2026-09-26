@@ -1,0 +1,15 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - vajra-data:/data
+    environment:
+      - VAJRA_LOG_LEVEL=INFO
+      # Read from host env or the .env file next to this compose file (empty = unset)
+      - VAJRA_BASEMAPS__CARTO_KEY=${VAJRA_BASEMAPS__CARTO_KEY:-}
+    restart: unless-stopped
+
+volumes:
+  vajra-data:

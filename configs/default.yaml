@@ -1,0 +1,72 @@
+# Project Vajra default configuration.
+# Values here are defaults; environment variables of the form VAJRA_<SECTION>__<KEY>
+# override them (e.g. VAJRA_PATHS__DATA_ROOT=D:/data). Secrets are NEVER stored here.
+
+paths:
+  data_root: "data"
+  models_dir: "models"
+  store_dir: "store"          # forecasts, alerts, events (npz + sqlite)
+  web_dist: "web"             # static frontend served by the API in dev
+
+grid:
+  # Canonical nowcast grid: India window at 0.1 deg (~10 km).
+  name: "india_0p1"
+  lat_min: 6.0
+  lat_max: 38.0
+  lon_min: 66.0
+  lon_max: 98.0
+  step_deg: 0.1
+
+  # SEVIR fixed GOES-East sector (2 km px, 384x384). Geolocation is APPROXIMATE:
+  # verified geotransform pending (research backlog C-9). Used for replay events only.
+  sevir_center_lat: 37.5
+  sevir_center_lon: -97.5
+  sevir_km_per_px: 2.0
+  sevir_n: 384
+
+replay:
+  lead_minutes: [30, 60]      # primary nowcast leads
+  cycle_minutes: 10           # SEVIR cadence; synthetic provider also uses 10 min
+  history_minutes: 60         # observation history fed to models
+
+cells:
+  vil_threshold: 74.0         # SEVIR VIL scale: 74/255 corresponds to ~18.3 mm/h... see docs/DATA.md
+  min_area_px: 12
+  max_track_speed_km_h: 180
+  flash_radius_km: 12.0       # lightning attribute radius around cell centroid
+
+model:
+  xgb:
+    n_estimators: 300
+    max_depth: 5
+    learning_rate: 0.05
+    subsample: 0.9
+    colsample_bytree: 0.9
+    min_child_weight: 5
+  calibration_bins: 10
+
+risk:
+  # Documented, configurable mapping from calibrated probability to risk bands.
+  # These thresholds are our configuration, NOT validated IMD operational thresholds.
+  bands:
+    - {name: "LOW",      max: 0.20}
+    - {name: "MODERATE", max: 0.40}
+    - {name: "ELEVATED", max: 0.60}
+    - {name: "HIGH",     max: 0.80}
+    - {name: "SEVERE",   max: 1.01}
+
+alerts:
+  presets:
+    protective: {p_threshold: 0.30, min_confidence: 0.20}   # favour POD (schools/events)
+    operational: {p_threshold: 0.50, min_confidence: 0.35}  # balanced (DDMA workflow)
+  validity_minutes: 60
+  suppression_minutes: 30    # do not re-raise same region+severity inside window
+
+api:
+  cors_origins: ["http://localhost:5173", "http://localhost:8000", "http://127.0.0.1:8000"]
+
+basemaps:
+  # CARTO Basemaps API key (removes the "API key required" watermark on raster tiles).
+  # Set it via VAJRA_BASEMAPS__CARTO_KEY in the environment or a git-ignored .env —
+  # NEVER in this file. Empty means unset: the map still loads, watermark may show.
+  carto_key: ""

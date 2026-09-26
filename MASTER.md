@@ -100,6 +100,7 @@ Full matrix: **D2** (Deliverable 2) with physical + access tables and verificati
 | D8 | Stack: Python/xarray/Zarr/PySTEPS/XGBoost/PyTorch/FastAPI/PostGIS/MapLibre/Docker Compose | heavier infra (K8s, Kafka) | D9 §6 justifications | lean stack | fewer resume-buzzwords | High | scale demands it |
 | D9 | Late fusion now, early fusion later | single approach | degradation + ablation needs | staged | extra integration work | High | E3/E4 results |
 | D10 | Pilot region: Bihar/Eastern UP (Patna DWR visual) | Kerala, Odisha, NE | CROPC hotspots + DWR presence [RESEARCH] | Bihar/E-UP | not yet ground-truthed | Medium | data quality check in P1 |
+| D11 | Method validation on SEVIR (US) events; India-mode deferred until Indian labels/access | train on Indian data now | no public Indian flash data [VERIFIED] | SEVIR sandbox → held-out real event: BSS +0.50, FAR 0.08; baselines negative | US-domain evidence, India transfer unproven | High | ILLN/MOSDAC access granted (B-1/B-2) |
 
 ## 14. Unresolved Questions
 
@@ -126,10 +127,11 @@ Full matrix: **D2** (Deliverable 2) with physical + access tables and verificati
 
 ## 17. Current Implementation State
 
-- **2026-09-27 (Phase 0 closeout):** Research executed (5 parallel tracks, ~270 tool calls,
-  fetch-verified; two load-bearing claims re-verified independently: MOSDAC access tiers,
-  ECMWF Open Data licence). Deliverables D1–D12 committed (`1b1171f`) under `docs/research/`;
-  README refreshed to post-research state. Decisions D1–D10 logged. No implementation code yet.
-- **Next:** Phase 1 — Data Foundation (D7): SEVIR download, MOSDAC archive pull via `mdapi.py`,
-  GFS/ECMWF/ERA5/IMERG/LIS fetchers, evaluation harness. Day-1 external actions: B-1, B-2.
+- **2026-09-27 (implementation session):** The MVP system is BUILT and RUNNING.
+  - **Implemented** `[IMPLEMENTED]`: full pipeline (ingest → QC → cell detection/tracking → features → models → calibrated forecasts → risk → alerts → SQLite/npz store → FastAPI → MapLibre UI with mode badges, timeline, alert center, verification scoreboard); SEVIR real-data replay provider (HTTP range reads, 6 events cached); synthetic SIMULATION provider; IMD radar GIF LIVE-visual proxy (SSRF-hardened); fallback router; verification (POD/FAR/CSI, BSS, reliability, FSS).
+  - **Measured on real data** `[VERIFIED — this repo, scripts/train_model.py + run_replay]`: XGBoost late fusion trained on 4 SEVIR events (3,652 samples, 9.0 % positive), isotonic-calibrated on 1 event; **held-out real event S810646 (43,901 GLM flashes): POD 0.52, FAR 0.08, CSI 0.50, BSS +0.498 (30 min) / +0.489 (60 min)** vs climatology. Same event, baselines only (advection/persistence/climatology): POD 0.20–0.30, FAR 0.75–0.77, **BSS −0.23/−0.55**. The ML-vs-baseline claim the research demands is therefore evidenced, not asserted.
+  - **Constraints discovered** `[VERIFIED]`: Windows Application Control blocks scipy/sklearn wheels → pure-numpy image ops + PAVA calibration (no loss of function); Carto basemap tiles now need an API key → OSM raster tiles used.
+  - **Tests:** 35 pytest tests green (unit + E2E + API incl. failure paths). UI verified in browser: zero console errors; real-event replay displayed.
+  - **Still blocked/unknown** (unchanged): numeric Indian radar, ILLN flashes, IMD-GFS GRIB, MOSDAC privileged NRT, NWP GRIB parsing (cfgrib blocked by OS policy — interface + honest UNAVAILABLE in place).
+- **2026-09-27 (Phase 0 closeout):** research executed, deliverables D1–D12 committed (`1b1171f`).
 - **2026-09-27 (early):** repository initialized; brief archived; MASTER skeleton created.
