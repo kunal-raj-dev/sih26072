@@ -1,7 +1,12 @@
 .venv/
+.pytest_cache/
+.mimosa/
+.playwright-mcp/
 tests/
 docs/
 scripts/
+store/
+web/
 data/external/
 data/processed/
 models/unet_spatiotemporal/
@@ -12,5 +17,6 @@ models/unet_spatiotemporal/
 *.png
 *.gif
 *.log
+*.md
 docker-compose.yml
 Dockerfile

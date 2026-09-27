@@ -159,3 +159,6 @@ $$\text{Brier Skill Score (BSS)} = 1 - \frac{\text{BS}_{\text{model}}}{\text{BS}
 4. [`docs/ML.md`](file:///c:/Users/kunal/Desktop/sih26072/docs/ML.md) — Dual-Track Machine Learning & Algorithmic Specification.
 5. [`docs/DEPLOYMENT.md`](file:///c:/Users/kunal/Desktop/sih26072/docs/DEPLOYMENT.md) — Production Containerization & Operations Manual.
 6. [`IMPLEMENTATION_PLAN.md`](file:///c:/Users/kunal/Desktop/sih26072/IMPLEMENTATION_PLAN.md) — 11-Phase Master Engineering Blueprint.
+7. [`docs/FRONTEND_UX_AUDIT.md`](docs/FRONTEND_UX_AUDIT.md) — Verified presentation-layer audit (P0 defects: alert time-base bug, block-geocoding population, invisible probability field, scoreboard fallback fabrication).
+8. [`docs/FRONTEND_PRESENTATION_BLUEPRINT.md`](docs/FRONTEND_PRESENTATION_BLUEPRINT.md) — **[DECISION]** Target demo UX: one unified console + thin 8-step demo rail (no separate presentation product); timeline-as-narrative; threat-hero card; per-alert settled verification; mode-gated scoreboard. Planning only — not yet implemented.
+9. [`docs/FRONTEND_PRESENTATION_RESEARCH.md`](docs/FRONTEND_PRESENTATION_RESEARCH.md) / [`docs/FRONTEND_IMPLEMENTATION_PLAN.md`](docs/FRONTEND_IMPLEMENTATION_PLAN.md) — Evidence base (phases P0–P9; backend asks limited to B-1 geocoding data + B-2 admin scale-up).

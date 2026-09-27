@@ -780,8 +780,12 @@ def _ensure_pipeline(event_id: str, settings: Settings, store: Store, state: dic
     fusion = None
     artifact = settings.models_dir / "xgb_fusion"
     if (artifact / "model.json").exists():
-        fusion = XGBFusionModel(artifact)
-        fusion.load()
+        try:
+            fusion = XGBFusionModel(artifact)
+            fusion.load()
+        except Exception as e:
+            logger.warning("Could not load XGBFusionModel: %s. Operating on physics/kinematic advection ladder.", e)
+            fusion = None
 
     physics = AdvectionModel(vil_threshold=settings.cells.vil_threshold)
     persistence = PersistenceModel()
