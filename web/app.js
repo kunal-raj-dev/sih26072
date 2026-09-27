@@ -342,7 +342,13 @@ $("run-btn").onclick = async () => {
 
 async function loadRun() {
   state.forecasts = await api(`/runs/${state.runId}/forecasts`);
-  state.index = Math.floor(state.forecasts.length / 3);
+  // Land on the peak-threat cycle, never on an empty tail or an arbitrary fraction.
+  let peakIdx = 0, peakP = -1;
+  state.forecasts.forEach((f, i) => {
+    const pmax = Math.max(0, ...(f.steps || []).map((s) => s.p_flash_max || 0));
+    if (pmax > peakP) { peakP = pmax; peakIdx = i; }
+  });
+  state.index = peakIdx;
   $("timeline").max = Math.max(0, state.forecasts.length - 1);
   $("timeline").value = state.index;
   const run = await api(`/runs/${state.runId}`);
@@ -350,15 +356,37 @@ async function loadRun() {
   renderVerification(run.verification);
   state.flashes = await api(`/events/${encodeURIComponent(state.eventId)}/flashes.geojson`);
   state._gridCache = {};
-  // Recenter the map on this event's domain before rendering.
-  const first = state.forecasts[0];
-  if (first) {
+  renderStep();
+  await fitToEvent();
+}
+
+// Fit the camera to the storm footprint (cells of the current cycle), padded —
+// the whole domain grid is far too wide to show the phenomenon.
+async function fitToEvent() {
+  const f = currentForecast();
+  if (!f) return;
+  try {
+    const fc = await api(`/forecasts/${f.id}/cells.geojson?lead=${state.lead}`);
+    const pts = [];
+    for (const ft of (fc.features || [])) {
+      const g = ft.geometry;
+      if (!g) continue;
+      const polys = g.type === "Polygon" ? [g.coordinates]
+        : (g.type === "MultiPolygon" ? g.coordinates : []);
+      for (const poly of polys) for (const [lon, lat] of (poly[0] || [])) pts.push([lon, lat]);
+    }
+    if (pts.length < 3) throw new Error("no cells");
+    const lons = pts.map((p) => p[0]), lats = pts.map((p) => p[1]);
+    const pad = 0.35;
+    map.fitBounds([[Math.min(...lons) - pad, Math.min(...lats) - pad],
+                   [Math.max(...lons) + pad, Math.max(...lats) + pad]],
+                  { padding: 30, duration: 800 });
+  } catch (_) {
     try {
-      const detail = await api(`/forecasts/${first.id}`);
+      const detail = await api(`/forecasts/${f.id}`);
       fitToGrid(detail.grid);
     } catch (_) { /* keep current view */ }
   }
-  renderStep();
 }
 
 // ---------- timeline & playback ----------
@@ -637,8 +665,15 @@ async function renderAlerts(f) {
   const alerts = await api(`/alerts?run_id=${state.runId}&preset=${preset}&lead_minutes=${state.lead}`);
   const t = new Date(f.replay_time).getTime();
   const active = alerts.filter((a) => {
+    // Replay events: the alert window is in event time — show the warning while it is in force.
+    const vf = a.valid_from ? Date.parse(a.valid_from) : null;
+    const vu = a.valid_until ? Date.parse(a.valid_until) : null;
+    if (vf != null && vu != null && !Number.isNaN(vf) && !Number.isNaN(vu)) {
+      return t >= vf && t <= vu;
+    }
+    // LIVE fallback: issued_at is wall-clock time.
     const issued = new Date(a.issued_at).getTime();
-    return Math.abs(issued - t) < 30 * 60000; // alerts relevant near this cycle
+    return Math.abs(issued - t) < 30 * 60000;
   });
   state.activeAlerts = active;
 
@@ -1392,24 +1427,36 @@ setInterval(loadHealth, 60000);
     const savedPersona = localStorage.getItem("vajra_ui_persona") || "imd";
     setPersona(savedPersona);
     await loadEvents();
-    // Auto-run the first synthetic event so the page is never empty.
-    const sim = state.events.find((e) => e.mode === "SIMULATION");
-    if (sim) {
-      state.eventId = sim.id;
-      $("event-select").value = sim.id;
-      setModeBadge(sim.mode);
-      $("run-status").textContent = "Auto-running the labelled SIMULATION event for a first look…";
+    // Canonical zero state: the Bihar squall case study, at its peak-threat cycle,
+    // storm-zoomed — so the first screen is a working scene without any interaction.
+    const ev = state.events.find((e) => e.id === "bihar_squall_2026")
+      || state.events.find((e) => e.mode === "SIMULATION");
+    if (ev) {
+      state.eventId = ev.id;
+      $("event-select").value = ev.id;
+      setModeBadge(ev.mode);
+      $("run-status").textContent = "Auto-running the labelled case-study event for a first look…";
       try {
-        const res = await api(`/replay/${sim.id}/run`, { method: "POST" });
+        const res = await api(`/replay/${ev.id}/run`, { method: "POST" });
         state.runId = res.run_id;
-        $("run-status").textContent = `Run ${res.run_id}: ${res.cycles} cycles, ${res.alerts} alerts (SIMULATION).`;
+        $("run-status").textContent = `Run ${res.run_id}: ${res.cycles} cycles, ${res.alerts} alerts (${ev.mode}).`;
         await loadRun();
       } catch (e) {
         $("run-status").textContent = `Auto-run failed: ${e.message}`;
       }
     }
+    // Pre-warm the held-out SEVIR benchmark so the scoreboard moment is instant.
+    prewarmBenchmark();
   } catch (e) {
     $("run-status").textContent = `API unreachable: ${e.message}`;
   }
 })();
+
+async function prewarmBenchmark() {
+  try {
+    const runs = await api("/runs");
+    if (Array.isArray(runs) && runs.some((r) => r.event_id === "sevir_s810646")) return;
+    await api("/replay/sevir_s810646/run", { method: "POST" });
+  } catch (_) { /* benchmark unavailable — the scoreboard states that honestly */ }
+}
 
