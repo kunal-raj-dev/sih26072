@@ -74,15 +74,20 @@ in replay time — the filter should use those. Consequence: the DDMA overview c
 "🟢 All administrative blocks clear. No active convective warning" **during a P=0.60 HIGH
 storm**. This is the single most damaging defect in the demo.
 
-### 3.2 Block-level targeting does not populate (flagship feature silent)
-All alerts on both tested runs have `affected_districts=[]`, `affected_blocks=[]`,
-`population_exposed=0` (`alerts.py:146-176` populates only when the spatial index intersects).
-Standalone test: `SpatialIndex()` loads **24 districts / 85 blocks** and resolves Patna
-(“Patna Sadar”, pop 450,000) — the index works, the integration doesn't. MASTER.md claims
-**765 districts / 534 blocks**. The DEMO.md script promises "Phulwari, Danapur, Bihta" and
-"284,000 residents". None of that can appear today. (Candidate causes: admin GeoJSON content
-loaded is a reduced set; synthetic storm cells placed outside block coverage; intersect
-fallback path. Must be root-caused before any UI work that depends on it.)
+### 3.2 Block-level targeting partially silent (flagship feature degraded) — **RESOLVED in P0**
+At audit time, the sampled alert had `affected_districts=[]`, `affected_blocks=[]`,
+`population_exposed=0` (`alerts.py:146-176` populates only when the spatial index
+intersects). Post-audit root-cause: **the geocoding engine itself works** — a standalone
+`SpatialIndex` resolved Patna correctly, and 3 of 4 Bihar-run alerts already carried real
+blocks and populations. The real gap was **admin coverage**: the generated boundary set
+loaded only 24 districts / 85 blocks, and several case-study cell paths (Nawada/Jamui
+corridor, Jharkhand, Himachal) fell outside it. MASTER.md's "765 districts / 534 blocks"
+was aspirational, not what the generator produced. **Fix (P0/B-1+B-2):** the generator
+hierarchy was extended to **44 districts / 148 blocks** covering every India case-study
+cell path (real district/block names, synthetic simplified polygons, honestly documented
+in MASTER.md §4 Phase 2); after regeneration, **every alert on every India event (18/18) resolves
+to named blocks with exposed population** (verified across all five India replays; SEVIR's
+US-domain cells correctly stay block-free).
 
 ### 3.3 The probability field — the core product — is invisible
 Three stacked causes, all verified:

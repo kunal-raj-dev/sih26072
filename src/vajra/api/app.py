@@ -212,12 +212,13 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
         cs = get_case_study(run.event_id)
         cs_dict = asdict(cs) if cs else None
 
+        run_alerts = store.list_alerts(run_id=run_id)
         return {
             "run_id": run.id,
             "event_id": run.event_id,
             "mode": mode_val,
             "cycles": run.cycles,
-            "alerts_count": len(run.alerts),
+            "alerts_count": len(run_alerts) or len(run.alerts),
             "forecasts_count": len(fcs),
             "metrics": metrics,
             "sample_counts": {lead: len(s) for lead, s in samples.items()} if samples else {},
@@ -352,12 +353,21 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
         ist_offset = timezone(timedelta(hours=5, minutes=30))
         t_ist = f.replay_time.astimezone(ist_offset)
 
-        # Retrieve alerts for this forecast/cycle
+        # Retrieve alerts for this forecast/cycle (use replay valid_from/valid_until window)
         alerts_all = store.list_alerts(run_id=f.run_id if hasattr(f, "run_id") and f.run_id else None)
-        cycle_alerts = [
-            a for a in alerts_all
-            if a.preset == preset and abs((a.issued_at.astimezone(timezone.utc) - t_utc).total_seconds()) < 1800
-        ]
+        if not alerts_all and getattr(f, "event_id", None):
+            alerts_all = store.list_alerts(event_id=f.event_id)
+
+        def _in_cycle_window(a) -> bool:
+            if a.preset != preset:
+                return False
+            vf = a.valid_from.astimezone(timezone.utc) if getattr(a, "valid_from", None) else None
+            vu = a.valid_until.astimezone(timezone.utc) if getattr(a, "valid_until", None) else None
+            if vf is not None and vu is not None:
+                return vf <= t_utc <= vu
+            return abs((a.issued_at.astimezone(timezone.utc) - t_utc).total_seconds()) < 1800
+
+        cycle_alerts = [a for a in alerts_all if _in_cycle_window(a)]
 
         stages = [a.imd_stage for a in cycle_alerts if a.imd_stage]
         priority = {"RED": 4, "ORANGE": 3, "YELLOW": 2, "GREEN": 1}

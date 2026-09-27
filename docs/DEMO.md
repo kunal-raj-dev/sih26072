@@ -23,71 +23,103 @@ This command automatically:
 
 ---
 
-## 2. Beat-by-Beat 4-Minute Presentation Script
+## 2. Beat-by-Beat 4-Minute Presentation Script (8 Sequenced Moments)
 
-### [0:00 – 0:30] The Operational Crisis & The Existing Gap
-- **Action:** Open console on initial India domain view. Point to the live clock ribbon (Dual UTC & IST).
+The presentation is driven directly using the floating **Presentation Rail (`#demo-rail`)** or single-keystroke presentation shortcuts (**`1` through `8`**, or wireless presentation clicker **`[`** / **`]`**). The entire 4-minute demonstration requires **≤ 12 clicks/keystrokes** with zero latency lag.
+
+### [0:00 – 0:30] Moment 1: ① ORIENT (Key `1`) — The Operational Crisis & Zero-State Strike
+- **Action:** Press `1` or click `① ORIENT`. The console instantly loads the canonical Bihar squall at its peak threat cycle (15:20Z), storm-zoomed with Threat Hero Card active.
 - **Presenter Script:**
   > *"Respected Jury members, in India, lightning is the deadliest natural hazard, killing over 2,500 citizens every year—predominantly rural farmers and outdoor workers. Current institutional systems suffer from a severe operational gap:*
-  > 1. *IMD Nowcast Bulletins operate at the broad district level (often >3,000 km²) with static 3-hour latency, causing widespread false alarms that lead to warning fatigue.*
-  > 2. *Existing mobile apps like Damini alert users only after lightning has already struck within their vicinity—acting as detection sirens rather than predictive nowcasts.*
-  > *Project Vajra bridges this gap: India’s first open, calibrated, block-level convective nowcasting platform that predicts lightning strikes 30 to 60 minutes before the first ground strike occurs."*
+  > 1. *IMD Nowcast Bulletins operate at the broad district level (>3,000 km²) with static 3-hour latency, causing widespread false alarms that lead to warning fatigue.*
+  > 2. *Existing mobile apps like Damini alert users only after lightning has already struck—acting as detection sirens rather than predictive nowcasts.*
+  > *Project Vajra bridges this gap: India’s first open, calibrated, block-level convective nowcasting platform that predicts lightning strikes 30 to 60 minutes before the first ground strike occurs. Notice our zero-state: the console boots directly into a storm-zoomed, populated scene with zero setup latency."*
 
 ---
 
-### [0:30 – 1:15] Multi-Modal Convective Fusion & Real-Time Tracking
-- **Action:** Select case study `Severe Bihar Squall Line` from the top header dropdown. Press `▶` on the timeline scrubber. Toggle layers: `Radar Mosaic`, `Observed Flashes`, `Active Cells`.
+### [0:30 – 1:00] Moment 2: ② OBSERVE (Key `2`) — Multi-Sensor Convective Tracking
+- **Action:** Press `2` or click `② OBSERVE`. Camera smoothly frames the lead storm core with an informational pulse; observation layers (radar reflectivity, satellite VIL/IR) and active cells are displayed.
 - **Presenter Script:**
   > *"Here is the severe pre-monsoon squall line over South Bihar (Patna, Gaya, Nalanda) with extreme CAPE exceeding 3,800 J/kg. Notice our multi-modal fusion engine:*
-  > *Our pipeline ingests multi-station Doppler radar sweeps, INSAT-3D thermal infrared cooling rates, and NASA ISS-LIS / GLM lightning observations.*
-  > *Using our multi-threshold Lagrangian cell tracker, Vajra segments convective cores, calculates track velocities via Kalman filtering, and projects dynamic 60-minute cones of uncertainty."*
+  > *Our pipeline ingests Doppler weather radar sweeps, INSAT-3D thermal infrared cooling rates, and NASA ISS-LIS / GLM lightning observations.*
+  > *Using our multi-threshold Lagrangian cell tracker, Vajra segments convective cores, calculates track velocities via Kalman filtering (moving east-northeast at 48 km/h with 56 dBZ core reflectivity), and projects real-time storm telemetry."*
 
 ---
 
-### [1:15 – 2:00] Dual-Track AI Engine & Calibrated Probability Fields
-- **Action:** Switch to `+30m Nowcast` and `+60m Horizon` on the timeline scrubber. Adjust `Probability Opacity` slider. Hover over storm cores to display cell telemetry.
+### [1:00 – 1:30] Moment 3: ③ PREDICT (Key `3`) — Calibrated Probability Fields
+- **Action:** Press `3` or click `③ PREDICT`. Map preset switches to NOWCAST (+60m horizon) displaying calibrated probability fields and dynamic 60-minute widening uncertainty cones.
 - **Presenter Script:**
   > *"Rather than relying on black-box predictions, Vajra employs a Dual-Track Architecture:*
   > *Track A executes 16-feature late-fusion gradient boosted trees with PAVA isotonic probability calibration. Track B executes a PyTorch spatiotemporal U-Net on continuous satellite infrared fields.*
-  > *Notice the smooth, bilinear WebGL probability contours. Every probability represents a mathematically honest, calibrated physical likelihood: P(flash ≥ 1 in next 60 min). Hovering over a cell shows real-time telemetry: max reflectivity (56 dBZ), storm top cooling rate (12 K/10min), and cell velocity (48 km/h)."*
+  > *Notice the smooth, bilinear WebGL probability contours. Every probability represents a mathematically honest, calibrated physical likelihood: P(flash ≥ 1 in next 60 min). Dynamic cones of uncertainty widen naturally along the storm track, accurately reflecting growing spatial variance across the 60-minute forecast horizon."*
 
 ---
 
-### [2:00 – 2:45] Block-Level Targeting & Disaster Management Integration (CAP 1.2)
-- **Action:** Toggle between the two personas: **"IMD Duty Forecaster"** and **"DDMA Disaster Portal"** in the top navigation bar. Click **"🔔 Test Alert Chime"** to demonstrate Web Audio synthesized warning chime. Click **"📡 1-Click Broadcast"** to simulate CAP 1.2 dispatch to SACHET. Click on an active alert card in the right sidebar. Click **"📄 Bulletin"** to launch the bilingual Emergency Bulletin Modal (English & Hindi).
+### [1:30 – 2:00] Moment 4: ④ CI (Key `4`) — Pre-Convective Initiation Precursors
+- **Action:** Press `4` or click `④ CI PRECURSOR`. Convective initiation candidate layer activates, highlighting infant precursor rings before radar reflectivity develops.
 - **Presenter Script:**
-  > *"Nowcasting is useless without targeted action. Vajra introduces a Dual-Persona Architecture tailored for both operational meteorologists and civil defense teams:*
-  > *In DDMA Portal mode, the console transforms into a disaster command center displaying block-level administrative risk choropleths (H × S × E × V), exposed population counts (over 284,000 residents in vulnerable rural blocks), and Web Audio emergency sirens.*
-  > *Instead of alerting all of Patna district, Vajra pinpoints specific sub-districts: Phulwari, Danapur, and Bihta.*
-  > *Our Alert Engine enforces a 45-minute hysteresis suppression window to prevent alert fatigue, while permitting immediate escalation bypass for rapid 2-sigma lightning jumps.*
-  > *With one click, disaster managers can broadcast bilingual OASIS CAP 1.2 XML with NDMA SACHET directives, issue national sirens, or export PDF advisories."*
+  > *"The hardest challenge in nowcasting is catching infant storms before radar detects them. Here, Vajra's Convective Initiation (CI) engine analyzes rapid 10.8 µm brightness temperature cooling rates (< -4 K/10 min) and cloud-top glaciation signatures from INSAT-3D.*
+  > *These cyan precursor rings pinpoint infant updrafts 20 to 35 minutes before the first 35 dBZ radar echo appears, buying critical lead time for outdoor workers."*
 
 ---
 
-### [2:45 – 3:25] Satellite-Primary Fallback Ladder (Graceful Degradation)
-- **Action:** On the interactive terminal controller or station dropdown, demonstrate radar feed drop for Western Himalayan cloudburst (`himalayan_cloudburst_2026`).
+### [2:00 – 2:45] Moment 5: ⑤ WARN (Key `5`) — Civil Protection & Targeted CAP 1.2
+- **Action:** Press `5` or click `⑤ WARN`. Console transforms into DDMA Disaster Management Portal: block-level administrative risk tints, exposed population summary, escalation-gated synthesized audio alert chime, and 1-Click CAP broadcast button. Click **"📄 Bulletin"** to display printable official advisory.
+- **Presenter Script:**
+  > *"Nowcasting is useless without targeted civil action. In DDMA Portal mode, the console transforms into a disaster command center displaying block-level administrative warning tints across our 44-district / 148-block spatial index, exposed population counts, and escalation-gated Web Audio sirens.*
+  > *Instead of alerting all of Patna district, Vajra pinpoints specific sub-districts: Phulwari, Danapur, Patna Sadar, Sampatchak, and Bihta.*
+  > *Our Alert Engine enforces a 45-minute hysteresis suppression window to prevent alert fatigue, while permitting immediate escalation bypass for rapid 2-sigma lightning jumps.*
+  > *With one click, disaster managers can broadcast OASIS CAP 1.2 XML/JSON and Atom 1.0 feeds with NDMA SACHET directives, or print official advisories."*
+
+---
+
+### [2:45 – 3:15] Moment 6: ⑥ DEGRADE (Key `6`) — Graceful Fallback Ladder
+- **Action:** Press `6` or click `⑥ DEGRADE`. Automatically switches to the Western Himalayan cloudburst (`himalayan_cloudburst_2026`) case study in radar-sparse orographic terrain.
 - **Presenter Script:**
   > *"A critical question for operational deployment: What happens when radar fails or radar beams are blocked by Himalayan terrain?*
   > *Unlike foreign nowcasters that crash when radar data drops, Vajra was purpose-built for India's radar-sparse geography.*
-  > *Our Adaptive Model Router automatically detects data health degradation, downshifting through an explicit 4-rung fallback ladder. Here in the Western Himalaya case study, when radar is blind, Track B seamlessly takes over using INSAT-3D thermal infrared cooling, maintaining BSS +0.38 without dropping system availability."*
+  > *Our Adaptive Model Router automatically detects data health degradation, downshifting through an explicit 5-rung fallback ladder (`FULL_FUSION` → `REDUCED_MODALITY` → `PHYSICS_BASELINE` → `PERSISTENCE` → `CLIMATOLOGY`). Here in the Western Himalaya case study, when radar is blind, the router honestly reports its active rung while maintaining sub-district warning continuity without dropping system availability."*
 
 ---
 
-### [3:25 – 4:00] The Honest Scoreboard: Benchmarked Against 5 Baselines
-- **Action:** Click **"📊 Audit Scoreboard"** in the top navigation bar.
+### [3:15 – 3:45] Moment 7: ⑦ VERIFY (Key `7`) — Ground-Truth Verification & Settlement
+- **Action:** Press `7` or click `⑦ VERIFY`. Switches to the held-out MIT SEVIR benchmark (`sevir_s810646`), displays settled per-alert verdicts (✓ hit / ✗ false alarm on timeline and cards), and activates the COMPARE wipe crossfade slider.
+- **Presenter Script:**
+  > *"Vajra includes an automated Outcome Settlement Engine that scores every archived forecast against actual matured satellite lightning observations from NASA ISS-LIS and GLM.*
+  > *Every issued alert on the timeline settles into an unambiguous verdict: green check for verified ground strike inside the 60-minute window and spatial footprint; grey cross for unconfirmed false alarms.*
+  > *Using our COMPARE wipe slider, forecasters can crossfade observed storm reality against the predicted nowcast field to inspect spatial alignment."*
+
+---
+
+### [3:45 – 4:00] Moment 8: ⑧ AUDIT (Key `8`) — Scientific Audit Scoreboard
+- **Action:** Press `8` or click `⑧ AUDIT`. Opens the mode-gated Scientific Audit Scoreboard modal displaying verified benchmarks against 5 meteorological baselines.
 - **Presenter Script:**
   > *"Finally, the most important technical question: How accurate is Project Vajra really, and compared to what?*
-  > *Vajra includes an automated Outcome Settlement Engine that scores every archived forecast against actual matured satellite lightning observations.*
-  > *On this held-out verification scorecard:*
-  > 1. *Our Brier Skill Score (BSS) achieves +0.52 relative to historical climatology on held-out MIT SEVIR benchmarks (Veillette et al. 2020).*
-  > 2. *Our False Alarm Ratio (FAR) drops to 0.036—an 88% reduction in false alarms compared to the 65% FAR of official text bulletins.*
-  > 3. *Our 10-bin reliability diagram demonstrates strict monotonicity across all probability deciles with zero calibration inversions.*
-  > 4. *Under continuous 72-cycle operational burn-in (simulating 12 hours of uninterrupted nowcasting), mean cycle latency is 56.8 ms (17x faster than the 1-second SLA limit) with zero memory leaks (+4.15 MB).*
-  > *Project Vajra delivers verifiable, production-grade convective intelligence for India."*
+  > *Notice first that SIMULATION events are explicitly mode-gated so we never claim skill on synthetic data. On the held-out MIT SEVIR benchmark (`S810646`, 43,901 flashes):*
+  > 1. *Our Brier Skill Score (BSS) achieves **+0.498 (+30m) / +0.489 (+60m)** on the full benchmark (**+0.374** across the 407 live-settled cell samples shown here, with **ROC-AUC 0.932**), decisively outperforming all 5 baselines (Persistence BSS -0.261, NWP Threshold BSS -0.627, Advection BSS -0.232).*
+  > 2. *Our False Alarm Ratio (FAR) drops to **0.082** (full event) / **0.065** (live cell replay) with **CSI 0.502** and **POD 0.521**—cutting false alarms by >85% compared to blanket district advisories.*
+  > 3. *Murphy (1973) Brier decomposition and reliability curves are computed deterministically with zero fabricated fallback values.*
+  > 4. *Under continuous operational burn-in (`scripts/burn_in_load_test.py`), mean cycle latency is **<101 ms** (10× faster than the 1-second SLA) with zero memory leaks.*
+  > *Project Vajra delivers honest, verifiable, production-grade convective intelligence for India."*
 
 ---
 
-## 3. Anticipated Jury Questions & Defense Guide
+## 3. Presentation Rail & Rehearsal Keyboard Map
+
+| Key | Action | Presentation Purpose |
+|:---:|:---|:---|
+| <kbd>1</kbd>–<kbd>8</kbd> | Direct jump to Moments 1 through 8 | Instant jump to any demo beat |
+| <kbd>[</kbd> / <kbd>]</kbd> | Previous / Next demo moment | Standard wireless clicker navigation |
+| <kbd>R</kbd> | Reset to canonical Zero State (Bihar peak) | Single-key rehearsal recovery |
+| <kbd>Space</kbd> | Play / Pause cycle timeline | Dynamic storm evolution |
+| <kbd>←</kbd> / <kbd>→</kbd> | Step cycle -1 / +1 | Precision cycle inspection |
+| <kbd>Home</kbd> / <kbd>End</kbd> | Jump to Start (T0) / Peak threat cycle | Instant timeline navigation |
+| <kbd>Esc</kbd> | Close active modal / Dismiss overlays | Clean UI reset |
+| <kbd>?</kbd> | Toggle Keyboard Shortcuts Modal | Rehearsal cheat-sheet |
+
+---
+
+## 4. Anticipated Jury Questions & Defense Guide
 
 ### Q1: "Are you using real-time IMD Doppler Weather Radar feeds?"
 - **Answer:** *"For this competition, numerical IMD radar volumes are restricted under privileged MoES access; public IMD portals only serve 10-minute static CAPPI GIF images. We ingest public IMD radar imagery for visual reference, and validate quantitative radar volumes using open international radar archives (NEXRAD/SEVIR) and calibrated synthetic simulations. Our data ingestion architecture is fully decoupled—once institutional DWR access is granted, our Cressman mosaic engine connects via standard HDF5 sweeps with zero code changes."*

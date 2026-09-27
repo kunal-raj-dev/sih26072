@@ -9,17 +9,18 @@
 <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-<header id="topbar">
+<a href="#map" class="skip-link">Skip to interactive map</a>
+<header id="topbar" role="banner">
   <div class="brand">
     <span class="logo">⚡</span>
     <div>
       <h1>Project Vajra</h1>
-      <div class="subtitle">Thunderstorm &amp; Lightning Nowcasting · SIH 2026 PS 26072 (MoES/IMD)</div>
+      <div class="subtitle">⚡ Predicts lightning 30–60 min ahead · SIH 2026 PS 26072 (MoES/IMD)</div>
     </div>
   </div>
   <div class="persona-switcher" role="group" aria-label="Operational Persona Mode">
-    <button id="persona-imd" class="persona-btn active" title="Switch to IMD Duty Forecaster Mode">🔬 IMD Forecaster</button>
-    <button id="persona-ddma" class="persona-btn" title="Switch to DDMA Disaster Management Mode">🛡️ DDMA Portal</button>
+    <button id="persona-imd" class="persona-btn active" title="Switch to IMD Duty Forecaster Mode" aria-pressed="true">🔬 IMD Forecaster</button>
+    <button id="persona-ddma" class="persona-btn" title="Switch to DDMA Disaster Management Mode" aria-pressed="false">🛡️ DDMA Portal</button>
   </div>
   <div class="badges">
     <span id="mode-badge" class="badge badge-mode" title="Data mode of the displayed forecast">—</span>
@@ -29,75 +30,92 @@
 </header>
 
 <main id="layout">
-  <aside id="left">
+  <aside id="left" aria-label="Forecast controls and layer presets">
     <section class="panel">
       <h2>Event</h2>
       <select id="event-select" aria-label="Select replay event"></select>
-      <button id="run-btn" class="primary">Run nowcast replay</button>
+      <button id="run-btn" class="primary" aria-label="Run nowcast replay">Run nowcast replay</button>
       <div id="run-status" class="muted small">Select an event and run the replay. Replay data is real historical data; simulated events are labelled SIMULATION.</div>
     </section>
 
     <section class="panel">
       <h2>Replay timeline &amp; controls</h2>
       <div class="time-controls">
-        <button id="rewind-btn" title="Rewind to start (Home)">|◀</button>
-        <button id="prev-btn" title="Previous cycle (Left Arrow)">◀</button>
-        <button id="play-btn" title="Play/Pause (Space)" class="primary">▶</button>
-        <button id="next-btn" title="Next cycle (Right Arrow)">▶</button>
-        <button id="loop-btn" class="active" title="Toggle Loop Playback">🔁</button>
-        <button id="t0-btn" title="Jump to current T0 issue cycle (End)">● T0</button>
-        <select id="speed-select" title="Playback speed">
+        <button id="rewind-btn" title="Rewind to start (Home)" aria-label="Rewind to start (Home)">|◀</button>
+        <button id="prev-btn" title="Previous cycle (Left Arrow)" aria-label="Previous cycle (Left Arrow)">◀</button>
+        <button id="play-btn" title="Play/Pause (Space)" class="primary" aria-label="Play or Pause replay (Space)">▶</button>
+        <button id="next-btn" title="Next cycle (Right Arrow)" aria-label="Next cycle (Right Arrow)">▶</button>
+        <button id="loop-btn" class="active" title="Toggle Loop Playback" aria-label="Toggle loop playback">🔁</button>
+        <button id="t0-btn" title="Jump to first alert issue cycle (T0)" aria-label="Jump to first alert issue cycle (T0)">● T0</button>
+        <select id="speed-select" title="Playback speed" aria-label="Playback speed">
           <option value="1">1x</option>
           <option value="2">2x</option>
           <option value="4">4x</option>
           <option value="0.5">0.5x</option>
         </select>
+        <span id="horizon-indicator" class="horizon-indicator sr-only" aria-live="polite"></span>
         <div class="clock-container">
           <span id="clock" class="clock-utc">— Z</span>
           <span id="clock-ist" class="clock-ist">— IST</span>
         </div>
       </div>
-      <input id="timeline" type="range" min="0" max="0" value="0" aria-label="Timeline scrubber" />
-      <div id="horizon-indicator" class="horizon-indicator">
-        <span class="horizon-tag tag-obs" data-lead="-60">T-60m Obs</span>
-        <span class="horizon-tag tag-pre" data-lead="-30">T-30m Pre</span>
-        <span class="horizon-tag tag-t0 active" data-lead="0">● T0 NOW</span>
-        <span class="horizon-tag tag-nowcast" data-lead="30">+30m Nowcast</span>
-        <span class="horizon-tag tag-horizon" data-lead="60">+60m Horizon</span>
+      <div id="timeline-axis" tabindex="0" role="slider"
+           aria-label="Event timeline — observed (solid) and forecast (dashed) with alert markers; arrow keys step, click or drag to jump"
+           aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+        <div class="tl-rail"></div>
+        <div class="tl-seg-observed"></div>
+        <div class="tl-seg-forecast"></div>
+        <div class="tl-ticks"></div>
+        <div class="tl-markers" id="tl-markers"></div>
+        <div class="tl-now"><span class="tl-now-dot"></span><span class="tl-now-label">NOW</span></div>
       </div>
       <div class="lead-row">
-        <label>Lead:
-          <select id="lead-select" aria-label="Forecast lead">
-            <option value="30">+30 min</option>
-            <option value="60" selected>+60 min</option>
-          </select>
-        </label>
-        <label class="chk"><input type="checkbox" id="show-actual" checked /> actual flashes</label>
+        <span class="tl-lead-label">Horizon:</span>
+        <button id="lead-30" class="tl-lead-btn" aria-pressed="false">+30m</button>
+        <button id="lead-60" class="tl-lead-btn" aria-pressed="true">+60m</button>
+        <span id="tl-info" class="muted small" style="margin-left:auto;"></span>
+        <label class="chk" style="margin:0 0 0 8px;"><input type="checkbox" id="show-actual" checked /> actual flashes</label>
       </div>
       <div id="cycle-note" class="muted small"></div>
     </section>
 
     <section class="panel">
-      <h2>Layers &amp; Filters</h2>
-      <label class="chk"><input type="checkbox" id="lyr-prob" checked /> Forecast flash probability</label>
-      <div class="slider-row">
-        <label for="lyr-prob-opacity">Probability opacity: <span id="prob-opacity-val">92%</span></label>
-        <input type="range" id="lyr-prob-opacity" min="15" max="100" value="92" />
+      <h2>Map view</h2>
+      <div class="preset-switch" role="group" aria-label="Map view preset">
+        <button class="map-preset" id="preset-observe" data-preset="OBSERVE" aria-pressed="false">👁 OBSERVE</button>
+        <button class="map-preset" id="preset-nowcast" data-preset="NOWCAST" aria-pressed="true">⚡ NOWCAST</button>
+        <button class="map-preset" id="preset-compare" data-preset="COMPARE" aria-pressed="false">⇔ COMPARE</button>
       </div>
-
-      <!-- Split-Screen Verification Slider (TASK-V2-9.3) -->
-      <div class="split-slider-container">
-        <label for="compare-slider">↔️ Split-Screen Verification (Nowcast vs Obs): <span id="compare-val">50/50</span></label>
-        <div class="split-slider-row">
-          <input type="range" id="compare-slider" min="0" max="100" value="50" aria-label="Split-screen compare slider" />
+      <button id="fit-storm" class="small-btn" style="width:100%;margin-top:6px;" aria-label="Fit map camera to storm event (R)">⌖ Fit storm (R)</button>
+      <div id="compare-caption" class="compare-caption" style="display:none;">
+        <div class="compare-labels"><span>◂ OBSERVED</span><span id="compare-val">50/50</span><span>NOWCAST ▸</span></div>
+        <input type="range" id="compare-slider" min="0" max="100" value="50" aria-label="Observed vs nowcast wipe" />
+        <div class="muted small" style="margin-top:4px;">Crossfade between the observed field and the nowcast — the verification view.</div>
+      </div>
+      <details class="expert-drawer">
+        <summary>Expert layers &amp; opacity</summary>
+        <label class="chk"><input type="checkbox" id="lyr-prob" checked /> Forecast flash probability</label>
+        <div class="slider-row">
+          <label for="lyr-prob-opacity">Probability opacity: <span id="prob-opacity-val">92%</span></label>
+          <input type="range" id="lyr-prob-opacity" min="15" max="100" value="92" aria-label="Forecast probability layer opacity" />
         </div>
-      </div>
-
-      <label class="chk"><input type="checkbox" id="lyr-obs" checked /> Observation field (VIL / IR)</label>
-      <label class="chk"><input type="checkbox" id="lyr-cells" checked /> Storm cells (centroid / core)</label>
-      <label class="chk"><input type="checkbox" id="lyr-cones" checked /> Projected tracks &amp; cones (60 min)</label>
-      <label class="chk"><input type="checkbox" id="lyr-flashes" checked /> Lightning flashes</label>
-      <label class="chk"><input type="checkbox" id="lyr-admin" checked /> Administrative boundaries</label>
+        <label class="chk"><input type="checkbox" id="lyr-obs" checked /> Observation field (VIL / IR)</label>
+        <label class="chk"><input type="checkbox" id="lyr-cells" checked /> Storm cells (centroid / core)</label>
+        <label class="chk"><input type="checkbox" id="lyr-cones" checked /> Projected tracks &amp; cones (60 min)</label>
+        <label class="chk"><input type="checkbox" id="lyr-flashes" checked /> Lightning flashes</label>
+        <label class="chk"><input type="checkbox" id="lyr-admin" checked /> Administrative boundaries</label>
+        <label class="chk persona-imd-only"><input type="checkbox" id="lyr-radar-rings" checked /> Radar range rings (100 / 250 km)</label>
+        <label class="chk persona-imd-only"><input type="checkbox" id="lyr-radar-mosaic" /> Multi-Radar Composite (dBZ)</label>
+        <label class="chk persona-imd-only"><input type="checkbox" id="lyr-ci" checked /> Convective Initiation (precursor)</label>
+        <label class="chk persona-imd-only"><input type="checkbox" id="lyr-uncertainty" /> Forecast Uncertainty field</label>
+        <label class="chk persona-imd-only"><input type="checkbox" id="lyr-live" /> IMD radar (LIVE, visual only)</label>
+        <div class="station-row persona-imd-only">
+          <select id="station-select" aria-label="IMD radar station">
+            <option value="delhi">Delhi</option><option value="patna">Patna</option>
+            <option value="kolkata">Kolkata</option><option value="lucknow">Lucknow</option>
+          </select>
+        </div>
+      </details>
       <div class="district-jump-row">
         <label for="district-select">🎯 Jump to District:</label>
         <select id="district-select" aria-label="Quick jump to district">
@@ -116,43 +134,54 @@
           <option value="Dhanbad">Dhanbad</option>
         </select>
       </div>
-      <label class="chk persona-imd-only" style="margin-top:8px;"><input type="checkbox" id="lyr-radar-rings" checked /> Radar range rings (100 / 250 km)</label>
-      <label class="chk persona-imd-only"><input type="checkbox" id="lyr-radar-mosaic" /> Multi-Radar Composite (dBZ)</label>
-      <label class="chk persona-imd-only"><input type="checkbox" id="lyr-ci" checked /> Convective Initiation (precursor)</label>
-      <label class="chk persona-imd-only"><input type="checkbox" id="lyr-uncertainty" /> Forecast Uncertainty field</label>
-      <label class="chk persona-imd-only"><input type="checkbox" id="lyr-live" /> IMD radar (LIVE, visual only)</label>
-      <div class="station-row persona-imd-only">
-        <select id="station-select" aria-label="IMD radar station">
-          <option value="delhi">Delhi</option><option value="patna">Patna</option>
-          <option value="kolkata">Kolkata</option><option value="lucknow">Lucknow</option>
-        </select>
-      </div>
-    </section>
-
-    <section class="panel persona-imd-only">
-      <h2>Verification <span class="muted small">(this run, vs actual)</span></h2>
-      <table id="verif-table" class="verif">
-        <thead><tr><th>Lead</th><th>n</th><th>POD</th><th>FAR</th><th>CSI</th><th>BSS</th></tr></thead>
-        <tbody><tr><td colspan="6" class="muted">run a replay</td></tr></tbody>
-      </table>
-      <button id="btn-view-scoreboard" class="small-btn primary" style="width:100%;margin-top:8px;">📊 Full Audit Scoreboard</button>
-      <div class="muted small" style="margin-top:4px;">Metrics computed against actual GLM/LIS flashes after issue time. BSS vs climatology.</div>
     </section>
   </aside>
 
-  <div id="map"></div>
+  <div id="map-wrap" class="map-wrap" role="region" aria-label="Interactive Thunderstorm Nowcast Map">
+    <div id="map"></div>
 
-  <aside id="right">
+    <!-- Presentation Demo Rail (Phase P7) -->
+    <nav id="demo-rail" class="demo-rail" aria-label="Presentation Rehearsal Sequencer">
+      <div class="rail-header">
+        <span class="rail-title">🎙️ DEMO RAIL</span>
+        <span class="rail-badge">8 MOMENTS</span>
+        <div class="rail-actions">
+          <button id="rail-btn-prev" class="rail-nav-btn" title="Previous moment ([)" aria-label="Previous demo moment ([)">◂ Prev</button>
+          <button id="rail-btn-next" class="rail-nav-btn" title="Next moment (])" aria-label="Next demo moment (])">Next ▸</button>
+          <button id="rail-btn-reset" class="rail-action-btn" title="Reset to Zero State (R)" aria-label="Reset to Zero State (R)">↺ Reset (R)</button>
+          <button id="rail-btn-help" class="rail-action-btn" title="Keyboard Shortcuts (?)" aria-label="Keyboard Shortcuts (?)">⌨ ?</button>
+          <button id="rail-btn-hide" class="rail-action-btn" title="Dismiss Rail to Operational Mode (Esc)" aria-label="Dismiss Rail to Operational Mode (Esc)">✕ Hide</button>
+        </div>
+      </div>
+      <div class="rail-chips" role="group" aria-label="Demo Sequence Steps">
+        <button class="rail-chip active" data-step="1" aria-current="step" title="1. Zero-State Strike (Canonical Bihar peak cycle)">① ORIENT</button>
+        <button class="rail-chip" data-step="2" title="2. Multi-Sensor Detection (Cells + tracks + dBZ)">② OBSERVE</button>
+        <button class="rail-chip" data-step="3" title="3. Calibrated Nowcast (Field overlay + widening cones)">③ PREDICT</button>
+        <button class="rail-chip" data-step="4" title="4. Convective Initiation (Precursor cyan rings)">④ CI</button>
+        <button class="rail-chip" data-step="5" title="5. Impact &amp; Warn (DDMA blocks + population)">⑤ WARN</button>
+        <button class="rail-chip" data-step="6" title="6. Graceful Degradation (Satellite fallback ladder)">⑥ DEGRADE</button>
+        <button class="rail-chip" data-step="7" title="7. Ground-Truth Verification (Settled verdicts + COMPARE)">⑦ VERIFY</button>
+        <button class="rail-chip" data-step="8" title="8. Scientific Audit Scoreboard (BSS + ROC-AUC)">⑧ AUDIT</button>
+      </div>
+      <div id="rail-caption" class="rail-caption" aria-live="polite">
+        ① ORIENT — Zero-State Strike: Canonical Bihar squall peak cycle, storm-zoomed, threat hero card.
+      </div>
+    </nav>
+    <button id="rail-pill" class="rail-pill" style="display:none;" title="Restore Presentation Demo Rail (1–8)" aria-label="Restore Presentation Demo Rail (1–8)">🎙️ Demo Rail (1–8)</button>
+  </div>
+
+  <aside id="right" aria-label="Active alerts, data health, and legend">
     <section class="panel">
       <h2>Alert center</h2>
+      <div id="threat-hero" class="threat-hero" data-stage="GREEN" aria-live="polite"></div>
       <div class="preset-row">
         Preset:
         <select id="preset-select" aria-label="Alert preset">
           <option value="operational">Operational (balanced)</option>
           <option value="protective">Protective (high POD)</option>
         </select>
-        <button id="btn-cycle-bulletin" class="small-btn danger" title="Generate official printable IMD/NDMA Emergency Bulletin">📄 Bulletin</button>
-        <a href="/api/v1/alerts/feed.atom" target="_blank" style="margin-left:2px;font-size:11px;color:#38bdf8;text-decoration:none;padding:2px 6px;border:1px solid #0284c7;border-radius:4px;">📡 Feed</a>
+        <button id="btn-cycle-bulletin" class="small-btn danger" title="Generate official printable IMD/NDMA Emergency Bulletin" aria-label="Generate official printable IMD/NDMA Emergency Bulletin">📄 Bulletin</button>
+        <a href="/api/v1/alerts/feed.atom" target="_blank" rel="noopener" aria-label="CAP 1.2 Atom Alert Feed (opens in new tab)" style="margin-left:2px;font-size:11px;color:#38bdf8;text-decoration:none;padding:2px 6px;border:1px solid #0284c7;border-radius:4px;">📡 Feed</a>
       </div>
 
       <!-- DDMA Specific Actions & Overview (TASK-V2-9.1) -->
@@ -175,23 +204,22 @@
 
     <section class="panel">
       <h2>Legend</h2>
-      <div class="legend">
-        <div><span class="sw" style="background:rgba(250,204,21,0.75)"></span> MODERATE ≥ 0.20</div>
-        <div><span class="sw" style="background:rgba(249,115,22,0.8)"></span> ELEVATED ≥ 0.40</div>
-        <div><span class="sw" style="background:rgba(239,68,68,0.85)"></span> HIGH ≥ 0.60</div>
-        <div><span class="sw" style="background:rgba(168,0,230,0.9)"></span> SEVERE ≥ 0.80</div>
-        <div><span class="sw" style="background:rgba(0,229,255,0.7)"></span> Convective Initiation (cyan)</div>
-        <div><span class="sw" style="background:rgba(220,180,50,0.6)"></span> Forecast Uncertainty (amber)</div>
-        <div><span class="sw" style="background:rgba(220,220,220,0.6)"></span> observation field (grey)</div>
-        <div><span class="sw sw-dot"></span> actual GLM flash</div>
-      </div>
+      <div class="legend" id="legend-items"></div>
       <div class="muted small">Bands are configurable defaults — not validated IMD operational thresholds.</div>
     </section>
   </aside>
 </main>
 
+<section id="verify-strip" aria-label="Forecast verification — this run versus observed flashes">
+  <span class="vs-label">VERIFY</span>
+  <span class="vs-scope muted small" id="vs-scope">run a replay to settle forecasts</span>
+  <div class="vs-numbers" id="vs-numbers" aria-live="polite"></div>
+  <svg id="vs-reliability" width="132" height="40" style="display:none;" role="img"></svg>
+  <button id="vs-audit" class="small-btn primary" style="margin-left:auto;">📊 Full audit</button>
+</section>
+
 <!-- Printable Emergency Bulletin Modal -->
-<div id="bulletin-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-bulletin-title">
+<div id="bulletin-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="modal-bulletin-title">
   <div class="modal-dialog">
     <div class="modal-header">
       <h3 id="modal-bulletin-title">⚡ IMD / NDMA Severe Weather Emergency Bulletin</h3>
@@ -204,13 +232,13 @@
       <button class="small-btn primary" id="btn-print-bulletin">🖨️ Print / Save as PDF</button>
       <button class="small-btn" id="btn-copy-cap-xml">📋 Copy CAP XML</button>
       <button class="small-btn" id="btn-copy-cap-json">📋 Copy CAP JSON</button>
-      <button class="small-btn" id="bulletin-modal-dismiss">Close</button>
+      <button class="small-btn" id="bulletin-modal-dismiss" aria-label="Close dialog">Close</button>
     </div>
   </div>
 </div>
 
 <!-- Scoreboard Audit Modal -->
-<div id="scoreboard-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-score-title">
+<div id="scoreboard-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="modal-score-title">
   <div class="modal-dialog">
     <div class="modal-header">
       <h3 id="modal-score-title">📊 Operational Verification Scoreboard (Held-Out Events)</h3>
@@ -221,14 +249,80 @@
     </div>
     <div class="modal-footer">
       <button class="small-btn primary" id="btn-print-scoreboard">🖨️ Print Audit</button>
-      <button class="small-btn" id="scoreboard-modal-dismiss">Close</button>
+      <button class="small-btn" id="scoreboard-modal-dismiss" aria-label="Close dialog">Close</button>
     </div>
   </div>
 </div>
 
-<div id="toast"></div>
+<!-- Keyboard Shortcuts Cheat-Sheet Modal (Phase P7) -->
+<div id="shortcuts-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="modal-shortcuts-title">
+  <div class="modal-dialog" style="max-width: 520px;">
+    <div class="modal-header">
+      <h3 id="modal-shortcuts-title">⌨ Presentation &amp; Rehearsal Shortcuts</h3>
+      <button class="close-btn" id="shortcuts-modal-close" aria-label="Close modal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--panel-edge); text-align:left;">
+            <th style="padding:6px 8px; color:var(--text-strong);">Key</th>
+            <th style="padding:6px 8px; color:var(--text-strong);">Action</th>
+            <th style="padding:6px 8px; color:var(--muted);">Demo Target</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+            <td style="padding:6px 8px;"><kbd>1</kbd>–<kbd>8</kbd></td>
+            <td style="padding:6px 8px;">Jump to Demo Moment 1 through 8</td>
+            <td style="padding:6px 8px; color:var(--muted);">Sequencer</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+            <td style="padding:6px 8px;"><kbd>[</kbd> / <kbd>]</kbd></td>
+            <td style="padding:6px 8px;">Previous / Next demo moment</td>
+            <td style="padding:6px 8px; color:var(--muted);">Clicker</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+            <td style="padding:6px 8px;"><kbd>R</kbd></td>
+            <td style="padding:6px 8px;">Reset to Step 1 canonical strike (storm zoom)</td>
+            <td style="padding:6px 8px; color:var(--muted);">Recovery</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+            <td style="padding:6px 8px;"><kbd>Space</kbd></td>
+            <td style="padding:6px 8px;">Play / Pause cycle playback</td>
+            <td style="padding:6px 8px; color:var(--muted);">Timeline</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+            <td style="padding:6px 8px;"><kbd>←</kbd> / <kbd>→</kbd></td>
+            <td style="padding:6px 8px;">Step -1 / +1 forecast cycle</td>
+            <td style="padding:6px 8px; color:var(--muted);">Timeline</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+            <td style="padding:6px 8px;"><kbd>Home</kbd> / <kbd>End</kbd></td>
+            <td style="padding:6px 8px;">Jump to Start (T0) / Peak threat cycle</td>
+            <td style="padding:6px 8px; color:var(--muted);">Timeline</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+            <td style="padding:6px 8px;"><kbd>Esc</kbd></td>
+            <td style="padding:6px 8px;">Close active modal / Dismiss overlays</td>
+            <td style="padding:6px 8px; color:var(--muted);">General</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 8px;"><kbd>?</kbd></td>
+            <td style="padding:6px 8px;">Toggle this keyboard shortcuts reference</td>
+            <td style="padding:6px 8px; color:var(--muted);">Help</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="modal-footer">
+      <button class="small-btn primary" id="shortcuts-modal-dismiss" aria-label="Close dialog">Got it</button>
+    </div>
+  </div>
+</div>
 
-<footer id="footer">
+<div id="toast" role="status" aria-live="polite"></div>
+
+<footer id="footer" role="contentinfo">
   <span id="honesty-note">
     Every forecast carries its data mode (LIVE / REPLAY / SIMULATION), the model rung actually used,
     and its input health. Nothing on this map is simulated unless labelled.
