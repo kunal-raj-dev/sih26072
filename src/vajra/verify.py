@@ -179,7 +179,10 @@ def fss_neighborhood(
     Evaluates spatial forecast skill over physical neighborhood scales (e.g., window_size=3 is ~30 km,
     window_size=5 is ~50 km on 0.1 deg grid).
     """
-    import scipy.ndimage as ndi
+    try:
+        import scipy.ndimage as ndi
+    except ImportError:
+        from . import ndx as ndi
 
     fc_bin = (np.asarray(p_fc, dtype=float) >= threshold).astype(float)
     obs_bin = (np.asarray(p_obs, dtype=float) >= threshold).astype(float)

@@ -18,7 +18,10 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-import scipy.ndimage as ndi
+try:
+    import scipy.ndimage as ndi
+except ImportError:
+    from .. import ndx as ndi
 from PIL import Image
 
 from ..grid import GridSpec

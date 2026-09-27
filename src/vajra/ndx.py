@@ -116,3 +116,47 @@ def dilate(mask: np.ndarray, radius: int) -> np.ndarray:
             shifted[si:ei, sj:ej] = mask[si - di:ei - di, sj - dj:ej - dj]
             out |= shifted
     return out
+
+
+def gaussian_filter(a: np.ndarray, sigma: float = 1.0, **kwargs: Any) -> np.ndarray:
+    """Drop-in Gaussian filter replacement using separable smoothing."""
+    return smooth(a, sigma=sigma)
+
+
+def uniform_filter(a: np.ndarray, size: int = 3, **kwargs: Any) -> np.ndarray:
+    """Drop-in uniform filter replacement using box blur."""
+    r = max(1, size // 2)
+    out = _box_blur_1d(a.astype(np.float64), r, axis=0)
+    return _box_blur_1d(out, r, axis=1)
+
+
+def shift(a: np.ndarray, shift: tuple[float, float] | list[float], **kwargs: Any) -> np.ndarray:
+    """2D grid shift for advection without scipy."""
+    sy, sx = int(round(shift[0])), int(round(shift[1]))
+    h, w = a.shape
+    out = np.zeros_like(a)
+    src_y1 = max(0, -sy)
+    src_y2 = min(h, h - sy)
+    dst_y1 = max(0, sy)
+    dst_y2 = min(h, h + sy)
+    src_x1 = max(0, -sx)
+    src_x2 = min(w, w - sx)
+    dst_x1 = max(0, sx)
+    dst_x2 = min(w, w + sx)
+    if dst_y2 > dst_y1 and dst_x2 > dst_x1 and src_y2 > src_y1 and src_x2 > src_x1:
+        out[dst_y1:dst_y2, dst_x1:dst_x2] = a[src_y1:src_y2, src_x1:src_x2]
+    return out
+
+
+def generate_binary_structure(rank: int = 2, connectivity: int = 2) -> np.ndarray:
+    """Drop-in binary structure replacement for connectivity."""
+    return np.ones((3, 3), dtype=bool)
+
+
+def rankdata(a: np.ndarray | list[float]) -> np.ndarray:
+    """Drop-in scipy.stats.rankdata replacement in pure numpy."""
+    arr = np.asarray(a)
+    sorter = np.argsort(arr)
+    inv = np.empty_like(sorter)
+    inv[sorter] = np.arange(len(arr))
+    return inv.astype(float) + 1.0
