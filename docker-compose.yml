@@ -1,15 +1,41 @@
+version: "3.8"
+
 services:
-  api:
-    build: .
+  vajra-engine:
+    container_name: vajra-nowcast-engine
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
     ports:
       - "8000:8000"
     volumes:
       - vajra-data:/data
     environment:
       - VAJRA_LOG_LEVEL=INFO
-      # Read from host env or the .env file next to this compose file (empty = unset)
       - VAJRA_BASEMAPS__CARTO_KEY=${VAJRA_BASEMAPS__CARTO_KEY:-}
+      - CDSAPI_URL=${CDSAPI_URL:-https://cds.climate.copernicus.eu/api}
+      - CDSAPI_KEY=${CDSAPI_KEY:-}
+      - EARTHDATA_USERNAME=${EARTHDATA_USERNAME:-}
+      - EARTHDATA_PASSWORD=${EARTHDATA_PASSWORD:-}
+      - NCMRWF_USERNAME=${NCMRWF_USERNAME:-}
+      - NCMRWF_PASSWORD=${NCMRWF_PASSWORD:-}
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    # Optional NVIDIA GPU acceleration when available; defaults smoothly to CPU
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
 volumes:
   vajra-data:
+    name: vajra-data-volume

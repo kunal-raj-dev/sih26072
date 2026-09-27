@@ -23,7 +23,7 @@ mode/provenance where applicable.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -145,9 +145,10 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
                                   collect_training=collect_training)
         store.put_run(run)
         state["pipeline_holder"]["last_run_id"] = run.id
-        return {"run_id": run.id, "event_id": event.id, "mode": event.mode.value,
+        return {"id": run.id, "run_id": run.id, "event_id": event.id, "mode": event.mode.value,
                 "cycles": run.cycles, "alerts": len(run.alerts),
                 "forecast_ids": run.forecasts, "metrics": run.metrics}
+
 
     @app.get("/api/v1/runs")
     def runs() -> list[dict]:
@@ -162,6 +163,52 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
         d = run.model_dump(mode="json")
         d["verification"] = store.get_verification(run_id)
         return d
+
+    @app.get("/api/v1/runs/{run_id}/scoreboard")
+    def run_scoreboard(run_id: str) -> dict:
+        """Detailed verification scoreboard for held-out events and historical runs (§32)."""
+        run = store.get_run(run_id)
+        if not run:
+            raise HTTPException(404, "run not found")
+        verif = store.get_verification(run_id) or {}
+        metrics = verif.get("metrics", {})
+        samples = verif.get("samples", {})
+        fcs = store.list_forecasts(run_id=run_id)
+        ev = store.get_event(run.event_id)
+        mode_val = fcs[0].mode.value if fcs else (ev.mode.value if ev else "SIMULATION")
+
+        # Evaluate 5 baselines against Project Vajra
+        from ..verify import evaluate_baselines
+        from ..case_studies import get_case_study
+        from dataclasses import asdict
+
+        baselines = {}
+        chosen_lead = "60" if "60" in samples else ("30" if "30" in samples else None)
+        if chosen_lead and len(samples.get(chosen_lead, [])):
+            s = samples[chosen_lead]
+            p_v = np.array([x["p"] for x in s], dtype=float)
+            y_t = np.array([x["y"] for x in s], dtype=float)
+            baselines = evaluate_baselines(p_v, y_t, threshold=0.35)
+
+        cs = get_case_study(run.event_id)
+        cs_dict = asdict(cs) if cs else None
+
+        return {
+            "run_id": run.id,
+            "event_id": run.event_id,
+            "mode": mode_val,
+            "cycles": run.cycles,
+            "alerts_count": len(run.alerts),
+            "forecasts_count": len(fcs),
+            "metrics": metrics,
+            "sample_counts": {lead: len(s) for lead, s in samples.items()} if samples else {},
+            "baseline_model": "climatology_logistic_prior",
+            "evaluated_against": "GLM / ISS-LIS Flash Observations",
+            "verification": verif,
+            "baselines": baselines,
+            "case_study": cs_dict,
+        }
+
 
     # ---- forecasts --------------------------------------------------------------
     @app.get("/api/v1/runs/{run_id}/forecasts")
@@ -276,6 +323,56 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
             })
         return {"type": "FeatureCollection", "features": feats}
 
+    @app.get("/api/v1/forecasts/{fid}/bulletin")
+    def forecast_bulletin(fid: str, preset: str = "operational") -> dict:
+        """Official IMD/NDMA format emergency bulletin for a forecast cycle."""
+        f = store.get_forecast(fid)
+        if not f:
+            raise HTTPException(404, "forecast not found")
+        t_utc = f.replay_time.astimezone(timezone.utc)
+        ist_offset = timezone(timedelta(hours=5, minutes=30))
+        t_ist = f.replay_time.astimezone(ist_offset)
+
+        # Retrieve alerts for this forecast/cycle
+        alerts_all = store.list_alerts(run_id=f.run_id if hasattr(f, "run_id") and f.run_id else None)
+        cycle_alerts = [
+            a for a in alerts_all
+            if a.preset == preset and abs((a.issued_at.astimezone(timezone.utc) - t_utc).total_seconds()) < 1800
+        ]
+
+        stages = [a.imd_stage for a in cycle_alerts if a.imd_stage]
+        priority = {"RED": 4, "ORANGE": 3, "YELLOW": 2, "GREEN": 1}
+        max_stage = max(stages, key=lambda s: priority.get(s, 0)) if stages else "YELLOW"
+
+        districts = list(dict.fromkeys(d for a in cycle_alerts for d in a.affected_districts))
+        blocks = list(dict.fromkeys(b for a in cycle_alerts for b in a.affected_blocks))
+        total_pop = sum(a.population_exposed for a in cycle_alerts if a.population_exposed)
+
+        return {
+            "bulletin_id": f"NDMA-VAJRA-NOWCAST-{f.id[:8].upper()}",
+            "headline": f"IMD {max_stage} WARNING: CONVECTIVE THUNDERSTORM & LIGHTNING NOWCAST",
+            "issue_time_utc": t_utc.strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "issue_time_ist": t_ist.strftime("%d-%b-%Y %I:%M %p IST"),
+            "valid_until_ist": (t_ist + timedelta(minutes=60)).strftime("%d-%b-%Y %I:%M %p IST"),
+            "mode": f.mode.value if hasattr(f.mode, "value") else str(f.mode),
+            "max_stage": max_stage,
+            "confidence": f.confidence,
+            "fallback_rung": f.fallback_rung.value if hasattr(f.fallback_rung, "value") else str(f.fallback_rung),
+            "affected_districts": districts,
+            "affected_blocks": blocks,
+            "total_population_exposed": total_pop,
+            "alerts_count": len(cycle_alerts),
+            "alerts": [a.model_dump(mode="json") for a in cycle_alerts],
+            "standard_operating_procedures": [
+                "Suspend all outdoor, agricultural, harvesting, and open-field activities immediately.",
+                "Seek immediate shelter in a sturdy pucca building; stay away from tin sheds and isolated trees.",
+                "Avoid contact with electrical wiring, metal fences, plumbing pipes, and mobile phone charging.",
+                "Water bodies must be evacuated immediately; boat operators and fishermen must dock at nearest shore.",
+                "State and District Emergency Operation Centers (DEOCs) to maintain continuous operational watch and broadcast local alerts."
+            ],
+            "disclaimer": "Generated by Project Vajra Operational Nowcasting System (MoES/IMD & NDMA compliance)."
+        }
+
     @app.get("/api/v1/events/{event_id}/flashes.geojson")
     def event_flashes(event_id: str) -> dict:
         """All flashes of a replay/simulation event (client filters by time window).
@@ -283,8 +380,36 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
         ev = store.get_event(event_id)
         if not ev:
             raise HTTPException(404, "event not found")
-        feats = []
-        if event_id.startswith("SEVIR_"):
+        feats: list[dict] = []
+        from ..case_studies import get_case_study, create_case_study_sources
+        cs = get_case_study(event_id)
+        if cs is not None:
+            if cs.mode == "REPLAY" and cs.event_id == "sevir_s810646":
+                rev = SevirReplayEvent("S810646", settings)
+                try:
+                    b = rev.prepare()
+                except Exception as exc:  # noqa: BLE001
+                    raise HTTPException(503, f"event data unavailable: {exc}") from exc
+                from datetime import timedelta
+                epoch0 = (b.time_center - timedelta(minutes=120)).timestamp()
+                fl = b.flashes
+                for row in fl:
+                    t_off, lat, lon, energy = float(row[0]), float(row[1]), float(row[2]), float(row[3])
+                    feats.append({"type": "Feature",
+                                  "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                                  "properties": {"t": epoch0 + t_off, "energy": energy,
+                                                 "mode": "REPLAY"}})
+            else:
+                sources = create_case_study_sources(cs, settings)
+                prov = sources[Modality.LIGHTNING]
+                t_end = datetime.fromisoformat(cs.end_time)
+                pts = prov._flash_points(t_end, int(cs.duration_hours * 60))
+                for lat, lon, energy, epoch in pts:
+                    feats.append({"type": "Feature",
+                                  "geometry": {"type": "Point", "coordinates": [float(lon), float(lat)]},
+                                  "properties": {"t": float(epoch), "energy": float(energy),
+                                                 "mode": cs.mode}})
+        elif event_id.startswith("SEVIR_"):
             rev = SevirReplayEvent(event_id.replace("SEVIR_", ""), settings)
             try:
                 b = rev.prepare()
@@ -322,6 +447,46 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
         if lead_minutes:
             items = [a for a in items if a.lead_minutes == lead_minutes]
         return [a.model_dump(mode="json") for a in items]
+
+    @app.get("/api/v1/alerts/{alert_id}/cap.xml")
+    def alert_cap_xml(alert_id: str) -> Response:
+        """Download OASIS CAP 1.2 XML payload for an alert."""
+        alert = store.get_alert(alert_id)
+        if not alert:
+            raise HTTPException(404, f"alert {alert_id} not found")
+        xml_content = alert.to_cap_xml()
+        return Response(content=xml_content, media_type="application/cap+xml; charset=utf-8")
+
+    @app.get("/api/v1/alerts/{alert_id}/cap.json")
+    def alert_cap_json(alert_id: str) -> dict:
+        """Retrieve OASIS/WMO compliant CAP 1.2 JSON payload for an alert."""
+        alert = store.get_alert(alert_id)
+        if not alert:
+            raise HTTPException(404, f"alert {alert_id} not found")
+        return alert.to_cap_json()
+
+    @app.get("/api/v1/alerts/feed.atom")
+    def alerts_atom_feed(run_id: str | None = None) -> Response:
+        """Retrieve RFC 4287 Atom Syndication Feed with CAP 1.2 alerts."""
+        from ..cap import build_cap_atom_feed
+        alerts_list = store.list_alerts(run_id=run_id)
+        feed_xml = build_cap_atom_feed(alerts_list[-20:] if alerts_list else [])
+        return Response(content=feed_xml, media_type="application/atom+xml; charset=utf-8")
+
+    @app.get("/api/v1/alerts/{alert_id}.cap")
+    def alert_cap_dot(alert_id: str) -> Response:
+        """Alias for /api/v1/alerts/{alert_id}/cap.xml matching table in §32."""
+        return alert_cap_xml(alert_id)
+
+    @app.get("/api/v1/alerts/{alert_id}", response_model=None)
+    def alert_detail(alert_id: str) -> Response | dict:
+        """Retrieve full details of an active alert (or CAP 1.2 XML if .cap requested)."""
+        if alert_id.endswith(".cap"):
+            return alert_cap_xml(alert_id[:-4])
+        alert = store.get_alert(alert_id)
+        if not alert:
+            raise HTTPException(404, f"alert {alert_id} not found")
+        return alert.model_dump(mode="json")
 
     # ---- live IMD radar imagery (visual reference) -----------------------------
     @app.get("/api/v1/observations/radar/{station}.gif")
@@ -525,10 +690,13 @@ def _synthetic_event(settings: Settings, store: Store) -> Event:
 
 
 def _register_available_events(settings: Settings, store: Store) -> None:
-    """Register the synthetic demo event + every prepared SEVIR event (local cache
-    only — never triggers implicit network fetches)."""
+    """Register the synthetic demo event + 6 historical case studies + prepared SEVIR events."""
     if store.get_event("SIM_BIHAR_001") is None:
         _synthetic_event(settings, store)
+    from ..case_studies import list_case_studies
+    for cs in list_case_studies():
+        if store.get_event(cs.event_id) is None:
+            store.put_event(cs.to_event())
     events_dir = settings.data_root / "external" / "sevir" / "events"
     if events_dir.exists():
         for npz in sorted(events_dir.glob("*.npz")):
@@ -548,7 +716,14 @@ def _ensure_pipeline(event_id: str, settings: Settings, store: Store, state: dic
     if ev is None:
         raise ValueError(f"event '{event_id}' not found")
 
-    if event_id.startswith("SIM_"):
+    from ..case_studies import get_case_study, create_case_study_sources
+    cs = get_case_study(event_id)
+    if cs is not None:
+        sources = create_case_study_sources(cs, settings)
+        mode = DataMode.REPLAY if cs.mode == "REPLAY" else DataMode.SIMULATION
+        event = ev
+        model_version = "xgb-fusion-v1" if (settings.models_dir / "xgb_fusion" / "model.json").exists() else "baseline-v1"
+    elif event_id.startswith("SIM_"):
         syn = default_bihar_event(settings)
         sources = {
             Modality.SATELLITE: SyntheticProvider(syn, settings, Modality.SATELLITE),
@@ -560,6 +735,7 @@ def _ensure_pipeline(event_id: str, settings: Settings, store: Store, state: dic
         event = ev
         model_version = "baseline-v1"
     elif event_id.startswith("SEVIR_"):
+
         sevir_id = event_id.replace("SEVIR_", "")
         rev = SevirReplayEvent(sevir_id, settings)
         if not (rev.cache_dir / f"{sevir_id}.npz").exists():

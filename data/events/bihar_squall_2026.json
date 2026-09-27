@@ -1,0 +1,76 @@
+{
+  "event_id": "bihar_squall_2026",
+  "title": "Severe Bihar Lightning Tragedy \u2014 Pre-Monsoon Convective Squall Line",
+  "regime": "Gangetic Plain / Pre-Monsoon (Nor'wester squall line)",
+  "start_time": "2026-05-12T13:30:00Z",
+  "end_time": "2026-05-12T16:30:00Z",
+  "duration_hours": 3.0,
+  "domain_name": "india-0.1deg",
+  "bbox": [
+    83.5,
+    24.0,
+    87.0,
+    26.5
+  ],
+  "primary_districts": [
+    "Patna",
+    "Gaya",
+    "Nalanda",
+    "Jehanabad",
+    "Bhojpur"
+  ],
+  "synoptic_narrative": "Dry mid-tropospheric westerlies overriding a shallow moist southeasterly tongue from the Bay of Bengal, creating extreme convective instability (SBCAPE > 3800 J/kg, 0-6 km shear > 22 m/s). An intense linear squall line rapidly propagated east-northeastward, generating over 350 cloud-to-ground lightning discharges in agricultural harvesting zones.",
+  "convective_features": [
+    "SBCAPE exceeding 3800 J/kg with steep mid-level lapse rates (7.8 C/km)",
+    "Rapid linear squall line propagation at 48 km/h along dryline boundary",
+    "High core radar reflectivity > 55 dBZ with strong cold cloud tops (< -68 C)",
+    "Concentrated cloud-to-ground flash rate exceeding 42 flashes/min"
+  ],
+  "mode": "SIMULATION",
+  "imd_bulletin": {
+    "bulletin_id": "IMD-PATNA-NOWCAST-20260512-003",
+    "issue_time": "2026-05-12T13:00:00Z",
+    "valid_until": "2026-05-12T16:00:00Z",
+    "target_districts": [
+      "Patna",
+      "Gaya",
+      "Nalanda",
+      "Bhojpur"
+    ],
+    "target_state": "Bihar",
+    "bulletin_text": "NOWCAST WARNING: Light to moderate thunderstorm accompanied with lightning and gusty winds (speed 40-50 kmph) likely to affect parts of Patna, Gaya, Nalanda, and Bhojpur districts during next 3 hours.",
+    "imd_color_code": "ORANGE",
+    "spatial_precision": "District-wide polygon (average area ~3,200 km\u00b2); no block contours.",
+    "temporal_latency": "3-hourly static advisory window; no dynamic lead-time updates."
+  },
+  "baseline_expectations": {
+    "climatology_persistence": "Fails to anticipate squall initiation; drops to near-zero skill at +60m.",
+    "nwp_environmental_threshold": "Overpredicts across the entire Gangetic basin (FAR > 0.68) due to unconstrained high CAPE.",
+    "lagrangian_advection": "Advects initial echoes reasonably for 20m, but fails to capture explosive downwind cell triggering.",
+    "uncalibrated_gbdt": "Overconfident probabilities (>0.95), inflating Brier score loss.",
+    "imd_text_bulletin": "Broad district blanket warning produces high detection (POD 0.88) but massive false alarms (FAR 0.72).",
+    "vajra": "Maintains high CSI (0.58) and positive BSS (+0.44) with precise 12 km block contours."
+  },
+  "cells": [
+    {
+      "lat0": 25.4,
+      "lon0": 84.2,
+      "v_lat": 0.35,
+      "v_lon": 0.45,
+      "peak_sigma": 0.28,
+      "peak_intensity": 1.0,
+      "t_ramp_up_h": 1.1,
+      "t_ramp_down_h": 1.9
+    },
+    {
+      "lat0": 24.8,
+      "lon0": 85.6,
+      "v_lat": 0.2,
+      "v_lon": 0.3,
+      "peak_sigma": 0.18,
+      "peak_intensity": 0.55,
+      "t_ramp_up_h": 1.6,
+      "t_ramp_down_h": 1.4
+    }
+  ]
+}

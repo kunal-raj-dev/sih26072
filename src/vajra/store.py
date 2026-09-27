@@ -168,6 +168,10 @@ class Store:
                      a.preset, a.region_name, a.model_dump_json()))
             self._conn.commit()
 
+    def get_alert(self, alert_id: str) -> Alert | None:
+        row = self._conn.execute("SELECT json FROM alerts WHERE id=?", (alert_id,)).fetchone()
+        return Alert.model_validate_json(row["json"]) if row else None
+
     def list_alerts(self, run_id: str | None = None, event_id: str | None = None,
                     severity: str | None = None) -> list[Alert]:
         q = "SELECT json FROM alerts"

@@ -60,7 +60,7 @@ alerts:
     protective: {p_threshold: 0.30, min_confidence: 0.20}   # favour POD (schools/events)
     operational: {p_threshold: 0.50, min_confidence: 0.35}  # balanced (DDMA workflow)
   validity_minutes: 60
-  suppression_minutes: 30    # do not re-raise same region+severity inside window
+  suppression_minutes: 45    # do not re-raise same region+severity inside window unless escalated
 
 api:
   cors_origins: ["http://localhost:5173", "http://localhost:8000", "http://127.0.0.1:8000"]

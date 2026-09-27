@@ -1,0 +1,73 @@
+{
+  "event_id": "andhra_coastal_cluster_2026",
+  "title": "Andhra Pradesh Coastal Thunderstorm Cluster & Sea-Breeze Convergence",
+  "regime": "Eastern Coastal Plain / Monsoon-Transition",
+  "start_time": "2026-06-08T10:00:00Z",
+  "end_time": "2026-06-08T13:00:00Z",
+  "duration_hours": 3.0,
+  "domain_name": "india-0.1deg",
+  "bbox": [
+    82.0,
+    16.5,
+    84.5,
+    18.5
+  ],
+  "primary_districts": [
+    "Visakhapatnam",
+    "Anakapalli",
+    "Vizianagaram",
+    "Kakinada"
+  ],
+  "synoptic_narrative": "Interaction between advancing sea-breeze front and inland convective heating sparked a quasi-stationary multicell convective system parallel to the coastline. Training convective cells produced localized torrential rain and continuous lightning.",
+  "convective_features": [
+    "Linear sea-breeze convergence boundary triggering repetitive cell regeneration",
+    "Quasi-stationary storm motion resulting in localized flash density hot-spots",
+    "Moderate CAPE (2200 J/kg) with high precipitable water (>55 mm)"
+  ],
+  "mode": "SIMULATION",
+  "imd_bulletin": {
+    "bulletin_id": "IMD-AMARAVATI-NOWCAST-20260608-001",
+    "issue_time": "2026-06-08T09:30:00Z",
+    "valid_until": "2026-06-08T12:30:00Z",
+    "target_districts": [
+      "Visakhapatnam",
+      "Vizianagaram",
+      "Kakinada"
+    ],
+    "target_state": "Andhra Pradesh",
+    "bulletin_text": "NOWCAST WARNING: Moderate thunderstorm with lightning likely over Visakhapatnam, Vizianagaram and Kakinada districts during next 3 hours.",
+    "imd_color_code": "YELLOW",
+    "spatial_precision": "Covers 3 districts spanning 240 km of coastline without spatial gradient.",
+    "temporal_latency": "3 hours static."
+  },
+  "baseline_expectations": {
+    "climatology_persistence": "Reasonable persistence at +15m, but fails as new cells back-build along the sea breeze.",
+    "nwp_environmental_threshold": "Moderate performance, but cannot pinpoint the narrow 8 km coastal convergence zone.",
+    "lagrangian_advection": "Advects existing cells inland while missing newly developing upwind feeder cells.",
+    "uncalibrated_gbdt": "Overconfident on mature cells, underconfident on infant convective towers.",
+    "imd_text_bulletin": "Widespread false alarm across inland non-convective taluks.",
+    "vajra": "Captures training cell dynamics with FSS > 0.62 at 30 km neighborhood scale."
+  },
+  "cells": [
+    {
+      "lat0": 17.7,
+      "lon0": 83.1,
+      "v_lat": 0.12,
+      "v_lon": 0.18,
+      "peak_sigma": 0.25,
+      "peak_intensity": 0.9,
+      "t_ramp_up_h": 1.0,
+      "t_ramp_down_h": 2.0
+    },
+    {
+      "lat0": 17.4,
+      "lon0": 82.8,
+      "v_lat": 0.15,
+      "v_lon": 0.15,
+      "peak_sigma": 0.2,
+      "peak_intensity": 0.8,
+      "t_ramp_up_h": 1.4,
+      "t_ramp_down_h": 1.6
+    }
+  ]
+}

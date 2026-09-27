@@ -34,14 +34,32 @@
     </section>
 
     <section class="panel">
-      <h2>Replay timeline</h2>
-      <div class="time-row">
-        <button id="prev-btn" aria-label="Previous step">◀</button>
-        <button id="play-btn" aria-label="Play">▶</button>
-        <button id="next-btn" aria-label="Next step">▶▶</button>
-        <span id="clock" class="clock">—</span>
+      <h2>Replay timeline &amp; controls</h2>
+      <div class="time-controls">
+        <button id="rewind-btn" title="Rewind to start (Home)">|◀</button>
+        <button id="prev-btn" title="Previous cycle (Left Arrow)">◀</button>
+        <button id="play-btn" title="Play/Pause (Space)" class="primary">▶</button>
+        <button id="next-btn" title="Next cycle (Right Arrow)">▶</button>
+        <button id="t0-btn" title="Jump to current T0 issue cycle (End)">● T0</button>
+        <select id="speed-select" title="Playback speed">
+          <option value="1">1x</option>
+          <option value="2">2x</option>
+          <option value="4">4x</option>
+          <option value="0.5">0.5x</option>
+        </select>
+        <div class="clock-container">
+          <span id="clock" class="clock-utc">— Z</span>
+          <span id="clock-ist" class="clock-ist">— IST</span>
+        </div>
       </div>
       <input id="timeline" type="range" min="0" max="0" value="0" aria-label="Timeline scrubber" />
+      <div id="horizon-indicator" class="horizon-indicator">
+        <span class="horizon-tag tag-obs" data-lead="-60">T-60m Obs</span>
+        <span class="horizon-tag tag-pre" data-lead="-30">T-30m Pre</span>
+        <span class="horizon-tag tag-t0 active" data-lead="0">● T0 NOW</span>
+        <span class="horizon-tag tag-nowcast" data-lead="30">+30m Nowcast</span>
+        <span class="horizon-tag tag-horizon" data-lead="60">+60m Horizon</span>
+      </div>
       <div class="lead-row">
         <label>Lead:
           <select id="lead-select" aria-label="Forecast lead">
@@ -55,14 +73,33 @@
     </section>
 
     <section class="panel">
-      <h2>Layers</h2>
+      <h2>Layers &amp; Filters</h2>
       <label class="chk"><input type="checkbox" id="lyr-prob" checked /> Forecast flash probability</label>
-      <label class="chk"><input type="checkbox" id="lyr-obs" checked /> Observation field</label>
-      <label class="chk"><input type="checkbox" id="lyr-cells" checked /> Storm cells</label>
+      <div class="slider-row">
+        <label for="lyr-prob-opacity">Probability opacity: <span id="prob-opacity-val">92%</span></label>
+        <input type="range" id="lyr-prob-opacity" min="15" max="100" value="92" />
+      </div>
+      <label class="chk"><input type="checkbox" id="lyr-obs" checked /> Observation field (VIL / IR)</label>
+      <label class="chk"><input type="checkbox" id="lyr-cells" checked /> Storm cells (centroid / core)</label>
       <label class="chk"><input type="checkbox" id="lyr-cones" checked /> Projected tracks &amp; cones (60 min)</label>
       <label class="chk"><input type="checkbox" id="lyr-flashes" checked /> Lightning flashes</label>
       <label class="chk"><input type="checkbox" id="lyr-admin" checked /> Administrative boundaries</label>
-      <label class="chk"><input type="checkbox" id="lyr-radar-rings" checked /> Radar range rings (100 / 250 km)</label>
+      <div class="district-jump-row">
+        <label for="district-select">🎯 Jump to District:</label>
+        <select id="district-select" aria-label="Quick jump to district">
+          <option value="">Select District…</option>
+          <option value="Patna">Patna</option>
+          <option value="Gaya">Gaya</option>
+          <option value="Muzaffarpur">Muzaffarpur</option>
+          <option value="Vaishali">Vaishali</option>
+          <option value="Nalanda">Nalanda</option>
+          <option value="Begusarai">Begusarai</option>
+          <option value="Bhagalpur">Bhagalpur</option>
+          <option value="Darbhanga">Darbhanga</option>
+          <option value="Rohtas">Rohtas</option>
+        </select>
+      </div>
+      <label class="chk" style="margin-top:8px;"><input type="checkbox" id="lyr-radar-rings" checked /> Radar range rings (100 / 250 km)</label>
       <label class="chk"><input type="checkbox" id="lyr-radar-mosaic" /> Multi-Radar Composite (dBZ)</label>
       <label class="chk"><input type="checkbox" id="lyr-ci" checked /> Convective Initiation (precursor)</label>
       <label class="chk"><input type="checkbox" id="lyr-uncertainty" /> Forecast Uncertainty field</label>
@@ -81,7 +118,8 @@
         <thead><tr><th>Lead</th><th>n</th><th>POD</th><th>FAR</th><th>CSI</th><th>BSS</th></tr></thead>
         <tbody><tr><td colspan="6" class="muted">run a replay</td></tr></tbody>
       </table>
-      <div class="muted small">Metrics computed against actual GLM flashes after issue time. BSS vs climatology.</div>
+      <button id="btn-view-scoreboard" class="small-btn primary" style="width:100%;margin-top:8px;">📊 Full Audit Scoreboard</button>
+      <div class="muted small" style="margin-top:4px;">Metrics computed against actual GLM/LIS flashes after issue time. BSS vs climatology.</div>
     </section>
   </aside>
 
@@ -96,6 +134,8 @@
           <option value="operational">Operational (balanced)</option>
           <option value="protective">Protective (high POD)</option>
         </select>
+        <button id="btn-cycle-bulletin" class="small-btn danger" title="Generate official printable IMD/NDMA Emergency Bulletin">📄 Bulletin</button>
+        <a href="/api/v1/alerts/feed.atom" target="_blank" style="margin-left:2px;font-size:11px;color:#38bdf8;text-decoration:none;padding:2px 6px;border:1px solid #0284c7;border-radius:4px;">📡 Feed</a>
       </div>
       <div id="alerts-list" class="alerts"><div class="muted">no alerts</div></div>
     </section>
@@ -121,6 +161,44 @@
     </section>
   </aside>
 </main>
+
+<!-- Printable Emergency Bulletin Modal -->
+<div id="bulletin-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-bulletin-title">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3 id="modal-bulletin-title">⚡ IMD / NDMA Severe Weather Emergency Bulletin</h3>
+      <button class="close-btn" id="bulletin-modal-close" aria-label="Close modal">&times;</button>
+    </div>
+    <div class="modal-body" id="bulletin-content">
+      <!-- Injected by JavaScript -->
+    </div>
+    <div class="modal-footer">
+      <button class="small-btn primary" id="btn-print-bulletin">🖨️ Print / Save as PDF</button>
+      <button class="small-btn" id="btn-copy-cap-xml">📋 Copy CAP XML</button>
+      <button class="small-btn" id="btn-copy-cap-json">📋 Copy CAP JSON</button>
+      <button class="small-btn" id="bulletin-modal-dismiss">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Scoreboard Audit Modal -->
+<div id="scoreboard-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-score-title">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3 id="modal-score-title">📊 Operational Verification Scoreboard (Held-Out Events)</h3>
+      <button class="close-btn" id="scoreboard-modal-close" aria-label="Close modal">&times;</button>
+    </div>
+    <div class="modal-body" id="scoreboard-content">
+      <!-- Injected by JavaScript -->
+    </div>
+    <div class="modal-footer">
+      <button class="small-btn primary" id="btn-print-scoreboard">🖨️ Print Audit</button>
+      <button class="small-btn" id="scoreboard-modal-dismiss">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
 
 <footer id="footer">
   <span id="honesty-note">

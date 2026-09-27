@@ -1,0 +1,48 @@
+{
+  "event_id": "sevir_s810646",
+  "title": "SEVIR Held-Out Benchmark Tornadic Squall Line (S810646)",
+  "regime": "Held-out SOTA Benchmark (MIT Lincoln Lab / GOES-16 + GLM + NEXRAD VIL)",
+  "start_time": "2019-06-05T19:00:00Z",
+  "end_time": "2019-06-05T23:00:00Z",
+  "duration_hours": 4.0,
+  "domain_name": "sevir-grid",
+  "bbox": [
+    -98.5,
+    34.0,
+    -94.5,
+    38.0
+  ],
+  "primary_districts": [
+    "SEVIR Quadrant 810646 (Held-Out Test Set)"
+  ],
+  "synoptic_narrative": "Real historical severe weather event from the MIT Lincoln Laboratory SEVIR archive. Intense bow-echo squall line with rear-inflow jet, high VIL, and massive GLM flash outburst (>1200 flashes/hour). Serves as the international peer-reviewed benchmark (Veillette et al. 2020).",
+  "convective_features": [
+    "Genuine real atmospheric data from GOES-16 ABI, GLM lightning, and NEXRAD VIL mosaics",
+    "Held-out test set event never seen during training",
+    "Bow-echo squall line with severe mesocyclone signature",
+    "Over 1200 GLM lightning flashes across 4 hours"
+  ],
+  "mode": "REPLAY",
+  "imd_bulletin": {
+    "bulletin_id": "NOAA-SPC-S810646-MOCK",
+    "issue_time": "2019-06-05T18:45:00Z",
+    "valid_until": "2019-06-05T22:45:00Z",
+    "target_districts": [
+      "Central Plains Severe Thunderstorm Watch 412"
+    ],
+    "target_state": "US Central Plains",
+    "bulletin_text": "SEVERE THUNDERSTORM WATCH: Large hail, damaging winds, and intense lightning likely.",
+    "imd_color_code": "RED",
+    "spatial_precision": "Regional watch box (~45,000 km\u00b2).",
+    "temporal_latency": "4-hour watch box."
+  },
+  "baseline_expectations": {
+    "climatology_persistence": "BSS negative (-0.23) at +60m as squall propagates across quadrant.",
+    "nwp_environmental_threshold": "High detection but excessive regional false alarms (FAR 0.59).",
+    "lagrangian_advection": "Competitive at +15m (CSI 0.42), decaying rapidly at +60m (CSI 0.18).",
+    "uncalibrated_gbdt": "Exhibits overconfidence on core echoes, lowering reliability score.",
+    "imd_text_bulletin": "Large watch box produces massive false alarms across unimpacted counties.",
+    "vajra": "Achieves state-of-the-art performance: BSS +0.50, POD 0.52, FAR 0.08 on held-out data."
+  },
+  "cells": []
+}

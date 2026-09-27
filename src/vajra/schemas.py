@@ -197,6 +197,21 @@ class Alert(BaseModel):
     affected_districts: list[str] = Field(default_factory=list)
     affected_blocks: list[str] = Field(default_factory=list)
     population_exposed: int = 0
+    imd_stage: Literal["GREEN", "YELLOW", "ORANGE", "RED"] = "YELLOW"
+    cap_severity: Literal["Minor", "Moderate", "Severe", "Extreme"] = "Moderate"
+    urgency: Literal["Immediate", "Expected", "Future", "Past", "Unknown"] = "Expected"
+    certainty: Literal["Observed", "Likely", "Possible", "Unlikely", "Unknown"] = "Likely"
+    headline: str = ""
+    is_update: bool = False
+    supersedes_id: str = ""
+
+    def to_cap_xml(self) -> str:
+        from .cap import build_cap_12_xml
+        return build_cap_12_xml(self)
+
+    def to_cap_json(self) -> dict:
+        from .cap import build_cap_12_json
+        return build_cap_12_json(self)
 
 
 class DataHealth(BaseModel):

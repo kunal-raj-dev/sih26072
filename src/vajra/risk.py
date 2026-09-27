@@ -38,13 +38,32 @@ def motion_speed(cell: Cell) -> float:
 
 
 def recommended_action(severity: str, preset: str) -> str:
-    """Static documented mapping — decision support, not an order."""
+    """NDMA / IMD lightning safety directives for disaster management decision support."""
     actions = {
-        ("WARNING", "protective"): "Move people out of open fields; shelter livestock; postpone outdoor work.",
-        ("WARNING", "operational"): "Consider issuing district siren/SMS; notify field teams.",
-        ("WATCH", "protective"): "Prepare to move; monitor updates every 30 min.",
-        ("WATCH", "operational"): "Alert response teams; verify communication channels.",
-        ("ADVISORY", "protective"): "Conditions developing; stay alert to updates.",
-        ("ADVISORY", "operational"): "No action required yet; monitor next cycle.",
+        ("WARNING", "protective"): (
+            "Take immediate shelter in a sturdy pucca building. Do NOT stay in open fields, "
+            "under tall trees, near metal fences, or tin-shed structures. Suspend outdoor school "
+            "activities and farm labor immediately."
+        ),
+        ("WARNING", "operational"): (
+            "Activate District Emergency Operations Center (DEOC). Dispatch high-priority CAP/SMS "
+            "broadcast to targeted administrative blocks. Alert quick response teams."
+        ),
+        ("WATCH", "protective"): (
+            "Be prepared to take immediate shelter. Move children, livestock, and outdoor workers "
+            "towards safe indoor locations. Avoid water bodies and open spaces."
+        ),
+        ("WATCH", "operational"): (
+            "Alert block disaster management officers and field emergency teams. Verify communication "
+            "networks and monitor nowcast updates every 10-15 minutes."
+        ),
+        ("ADVISORY", "protective"): (
+            "Atmospheric instability developing. Monitor nowcast updates every 15-30 minutes. "
+            "Identify nearest safe shelter locations."
+        ),
+        ("ADVISORY", "operational"): (
+            "Issue district meteorological advisory. Maintain standard readiness and monitor "
+            "subsequent nowcast cycles."
+        ),
     }
     return actions.get((severity, preset), "Monitor next update.")

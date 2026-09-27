@@ -309,9 +309,21 @@ class NowcastPipeline:
             steps=steps, confidence=round(confidence, 3), notes=notes,
             ci_candidates=ci_candidates,
         )
+
+        # Detect lightning jump cells (2-sigma flash count rate surge)
+        jump_cells: set[str] = set()
+        if len(feats):
+            for _, r in feats.iterrows():
+                f10 = float(r.get("flash_cnt_10", 0) or 0)
+                f30 = float(r.get("flash_cnt_30", 0) or 0)
+                past_rate = (f30 - f10) / 2.0
+                if f10 >= 6 and (past_rate == 0 or f10 > past_rate + 2.0 * max(1.0, float(np.sqrt(past_rate)))):
+                    jump_cells.add(str(r["_cell_id"]))
+
         alerts = self.alert_engine.generate(forecast, cells,
                                             lead_minutes=max(p_by_lead) if p_by_lead else None,
-                                            p_cell=p_by_lead.get(max(p_by_lead) if p_by_lead else 0, {}))
+                                            p_cell=p_by_lead.get(max(p_by_lead) if p_by_lead else 0, {}),
+                                            jump_cells=jump_cells)
         self._last_fields = fields
         # expose issue-time state for the replay runner's outcome settlement
         self._last_issue = (t, p_by_lead, cells,
@@ -416,19 +428,16 @@ class NowcastPipeline:
 
     def _summarize(self, samples: dict) -> dict:
         """Per-lead verification summary computed from settled (p, y) samples."""
-        from .verify import brier_skill_score, contingency, pod_far_csi
+        from .verify import compute_verification_suite
         summary = {}
         for L, s in samples.items():
-            p = np.array([x["p"] for x in s], dtype=float)
-            y = np.array([x["y"] for x in s], dtype=float)
             if not len(s):
                 continue
-            h, m, fa, _cn = contingency(p, y, 0.5)
-            pod, far, csi = pod_far_csi(h, m, fa)
-            bss = brier_skill_score(p, y, np.full_like(p, y.mean()))
-            summary[str(L)] = {"n": len(s), "pos_rate": float(y.mean()),
-                               "pod": pod, "far": far, "csi": csi, "bss": bss}
+            p = np.array([x["p"] for x in s], dtype=float)
+            y = np.array([x["y"] for x in s], dtype=float)
+            summary[str(L)] = compute_verification_suite(p, y, threshold=0.35, n_bins=5)
         return summary
+
 
     def _flashes_between(self, t0: datetime, t1: datetime) -> np.ndarray:
         src = self.sources.get(Modality.LIGHTNING)
