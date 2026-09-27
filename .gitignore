@@ -11,8 +11,10 @@ desktop.ini
 
 # --- Build/runtime artifacts ---
 store/
-/models/
+/models/*
+!/models/xgb_fusion/
 *.log
+audit-*.png
 
 # --- Secrets & environment ---
 .env

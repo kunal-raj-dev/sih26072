@@ -48,9 +48,15 @@ CREATE INDEX IF NOT EXISTS idx_alerts_run ON alerts(run_id);
 class Store:
     def __init__(self, settings: Settings):
         self.dir = settings.store_dir
-        self.dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
         self.artifacts = self.dir / "artifacts"
-        self.artifacts.mkdir(exist_ok=True)
+        try:
+            self.artifacts.mkdir(exist_ok=True)
+        except OSError:
+            pass
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(self.dir / "vajra.db", check_same_thread=False)
         self._conn.row_factory = sqlite3.Row

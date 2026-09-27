@@ -224,10 +224,24 @@ class Settings:
 
     @property
     def store_dir(self) -> Path:
+        if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+            tmp_store = Path(os.environ.get("VAJRA_PATHS__STORE_DIR", "/tmp/vajra/store"))
+            try:
+                tmp_store.mkdir(parents=True, exist_ok=True)
+                (tmp_store / "artifacts").mkdir(parents=True, exist_ok=True)
+            except OSError:
+                pass
+            return tmp_store
+        p = Path(self.paths.store_dir)
+        if p.is_absolute():
+            return p.resolve()
         return (REPO_ROOT / self.paths.store_dir).resolve()
 
     @property
     def web_dist(self) -> Path:
+        public_dir = REPO_ROOT / "public"
+        if public_dir.exists():
+            return public_dir.resolve()
         return (REPO_ROOT / self.paths.web_dist).resolve()
 
 
