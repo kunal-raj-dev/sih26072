@@ -8,10 +8,11 @@ records what the IMPLEMENTED system actually reads and how it is cached.
 | Provider | Mode | Source & license | Cache location | Notes |
 |---|---|---|---|---|
 | `sevir` (VIL/IR107/GLM) | REPLAY | SEVIR — MIT Lincoln Lab, AWS Open Data `s3://sevir`, "no restrictions on use" | `data/external/sevir/` | Single-event slabs via h5py+s3fs **HTTP range reads** (~14 MB/event); monthly GLM files cached whole (3-33 MB). Georeferenced per-event from catalog laea corners (linear interpolation, `geolocation=approximate`). |
+| `imerg` (IMERG V07C Early, precipitation) | **LIVE** | NASA GES DISC `GPM_3IMERGHHE.07` (Early run, ~4 h NRT); Final run `GPM_3IMERGHH.07` fallback for historical slots | `data/external/imerg/` | **Requires Earthdata Login** — credentials live ONLY in git-ignored `.env`; one-time GES DISC EULA acceptance via the URS `approve_app` resolution URL (completed 2026-09-27). India window 0.1° slices, `geolocation=exact`. Naming: `3B-HHR-*.MS.MRG.3IMERG.YYYYMMDD-SHHMMSS-*.HDF5`; grid stored (time, **lon**, lat) → transposed to (lat, lon). GES DISC legacy-server retirement announced for ≥2026-09-30 — cloud successor `data.gesdisc.earthdata.nasa.gov` uses the same paths. |
 | `synthetic` | SIMULATION | Deterministic generator (seeded), Bihar-domain 0.1° grid | — | Used for hermetic tests + guaranteed demo; every frame carries `mode=SIMULATION`. |
 | `imd_radar_gif` | LIVE (visual only) | mausam.imd.gov.in public station GIFs (© IMD) | — | **Visual reference only**; served through API proxy with `X-Data-Mode: LIVE-VISUAL-ONLY`. Allowlist-only URLs, same-host redirects. |
 | `gfs_nomads` | UNAVAILABLE | NOMADS open (verified reachable) | — | GRIB2 parser (cfgrib/eccodes) not provisioned — Windows Application Control blocks some compiled wheels. Router runs reduced-modality rung. |
-| `imerg_earthdata` | UNAVAILABLE | NASA Earthdata (free registration) | — | Credentials not provisioned. |
+| ISS LIS (flash labels) | UNAVAILABLE | NASA GHRC (same Earthdata account) | — | Credentials work; orbit-file parsing not yet implemented (backlog C-1). |
 
 ## VIL / IR107 / GLM semantics
 
@@ -36,6 +37,4 @@ records what the IMPLEMENTED system actually reads and how it is cached.
 | Credential | Purpose | Where it lives |
 |---|---|---|
 | `VAJRA_BASEMAPS__CARTO_KEY` | CARTO Basemaps API key — removes the keyless watermark on the raster basemap (`basemaps.cartocdn.com`). Public tile-access token by design; served to the browser via `GET /api/v1/config`. Non-commercial tier: free up to 5M tile requests/month. | Environment variable or git-ignored `.env` (template: `.env.example`) |
-
-MOSDAC / Earthdata credentials (not yet needed) would follow the same pattern:
-environment variables (`VAJRA_*`) or a git-ignored `.env` — never in YAML or code.
+| `EARTHDATA_USERNAME` / `EARTHDATA_PASSWORD` | NASA Earthdata Login — IMERG (implemented, LIVE) and ISS LIS (backlog). **One-time setup done 2026-09-27:** account `kunalrajdev` accepted the NASA GESDISC DATA ARCHIVE EULA (the URS `approve_app` flow for client `e2WVk8Pw6weeLUKZYOxvTQ`). | Git-ignored `.env` or environment variables — NEVER in YAML, source, examples, or tests |

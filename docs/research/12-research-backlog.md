@@ -9,7 +9,7 @@ Open items requiring verification or external action, with owners and next actio
 | B-1 | MOSDAC **privileged** account criteria & approval | gates LIVE INSAT (NRT); general tier = T-3 days [VERIFIED] | Register + file purpose statement day 1; email MOSDAC support; record trail | OPEN |
 | B-2 | IITM **ILLN flash data** research access | would upgrade India labels from satellite-only (weak) to ground-truth; unlocks E6 fully | Email IITM (lightning group / Damini team) with proposal; CROPC contact as alternate | OPEN |
 | B-3 | **IMD public API** access (IP whitelist) | official nowcast/warning feed for comparison + alert interop | Identify API doc PDF; request via IMD data cell / RMC | OPEN |
-| B-4 | NCMRWF **NCUM GRIB** registration + portal confirmation (rds/Maharshi) | India-native NWP fields beyond GFS | Register; email datahelp; verify portal URLs (site timed out during research) | OPEN |
+| B-4 | NCMRWF **NCUM GRIB** registration + portal confirmation (rds/Maharshi) | India-native NWP fields beyond GFS | Register; email datahelp; verify portal URLs (site timed out during research) | PARTIAL — registered + API login verified live (2026-09-27, see REQUIRED_USER_INPUTS §1.4); remaining: confirm NCUM GRIB dataset availability/download paths |
 | B-5 | **DWR GIF use terms** (attribution, scraping policy) | compliance for GIF→grid experiment | Written clarification from IMD; keep rate limits polite | OPEN |
 | B-6 | IMDAA via CEDA/RDS — confirm **CAPE availability** + current end year | India reanalysis feature quality | Register CEDA; inspect variable list | OPEN |
 

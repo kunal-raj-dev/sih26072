@@ -63,7 +63,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     radar_gif = ImradarGifProvider(settings)
     nwp = GfsNcepProvider()
-    imerg = ImergProvider()
+    imerg = ImergProvider(settings)
 
     # ---- health ------------------------------------------------------------
     @app.get("/api/v1/health")

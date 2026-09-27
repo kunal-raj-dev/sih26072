@@ -24,14 +24,16 @@ Status legend: ✅ obtained · 🟡 requested/pending · ⬜ not started · ➖ 
 | **Env vars** | `MOSDAC_USERNAME`, `MOSDAC_PASSWORD` |
 | **Status** | ⬜ |
 
-### 1.2 NASA Earthdata Login — `HIGH`
+### 1.2 NASA Earthdata Login — `HIGH` — ✅ obtained & verified live
 
 | | |
 |---|---|
 | **Register at** | https://urs.earthdata.nasa.gov (free) |
-| **Unlocks** | **ISS LIS flash-level data over India** (currently the only open lightning labels for the India model) + IMERG half-hourly precipitation (rain truth / labels) |
-| **Env vars** | `EARTHDATA_USERNAME`, `EARTHDATA_PASSWORD` |
-| **Status** | ⬜ |
+| **Unlocks** | **IMERG half-hourly precipitation — IMPLEMENTED & LIVE** (`vajra/providers/imerg.py`, GES DISC `GPM_3IMERGHHE.07` Early run, India 0.1° window) + **ISS LIS flash-level data over India** (labels for the India model; parsing pending, backlog C-1) |
+| **Env vars** | `EARTHDATA_USERNAME`, `EARTHDATA_PASSWORD` (git-ignored `.env`) |
+| **One-time setup done 2026-09-27** | Logged in via URS and accepted the **NASA GESDISC DATA ARCHIVE EULA** (`approve_app` for client `e2WVk8Pw6weeLUKZYOxvTQ`) — required before any GES DISC download works |
+| **Verified live** | `get_history()` returned real India-window frames (max 38.65 mm/hr, mode LIVE) |
+| **Status** | ✅ |
 
 ### 1.3 Copernicus CDS API key — `MEDIUM`
 
@@ -49,7 +51,19 @@ Status legend: ✅ obtained · 🟡 requested/pending · ⬜ not started · ➖ 
 | **Register at** | https://rds.ncmrwf.gov.in (or CEDA/JASMIN for the mirror) |
 | **Unlocks** | IMDAA 12 km India reanalysis; NCUM model fields (backlog **B-4**, **B-6**) |
 | **Env vars** | `NCMRWF_USERNAME`, `NCMRWF_PASSWORD` |
-| **Status** | ⬜ |
+| **Status** | ✅ Registered + login verified against the live API (2026-09-27) |
+
+**Verified access recipe** (site was unreachable during research; probed live 2026-09-27):
+
+- API base: `https://rds.ncmrwf.gov.in/api` (the web app is a Vite SPA; `/auth/login`
+  paths without the `/api` prefix just serve the SPA shell).
+- Login: `POST /api/auth/login` with JSON `{"email": ..., "password": ...}` —
+  FastAPI backend; the username-style field is `email`, not `username`.
+- Response: JSON `{"access_token", "token_type": "bearer"}` **and** an HttpOnly
+  `access_token` cookie (`Path=/`, Max-Age 15 days). The backend authenticates
+  API calls via the **cookie** — sending `Authorization: Bearer` to `/api/auth/me`
+  returns 401 "Not authenticated"; the `Cookie: access_token=...` header works.
+- Session check: `GET /api/auth/me` → account JSON (id, email, name, institution).
 
 ---
 
@@ -113,7 +127,7 @@ lightning feeds (Earth Networks/Vaisala) — see `docs/research/11-do-not-build.
 ## 5. Quick checklist
 
 - [ ] MOSDAC account created (and privileged tier requested)
-- [ ] Earthdata account created
+- [x] Earthdata account created (kunalrajdev) + GES DISC EULA accepted
 - [ ] CDS account + API key copied
 - [ ] IITM ILLN data-request email sent
 - [ ] IMD API access email sent

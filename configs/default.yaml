@@ -70,3 +70,10 @@ basemaps:
   # Set it via VAJRA_BASEMAPS__CARTO_KEY in the environment or a git-ignored .env —
   # NEVER in this file. Empty means unset: the map still loads, watermark may show.
   carto_key: ""
+
+earthdata:
+  # NASA Earthdata Login (IMERG / ISS LIS). Credentials come ONLY from the
+  # git-ignored .env (EARTHDATA_USERNAME / EARTHDATA_PASSWORD) or VAJRA_EARTHDATA__*
+  # environment variables — keep this section empty in git.
+  username: ""
+  password: ""

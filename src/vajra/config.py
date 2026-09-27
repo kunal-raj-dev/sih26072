@@ -129,6 +129,19 @@ class ApiConfig:
 
 
 @dataclass
+class EarthdataConfig:
+    """NASA Earthdata Login credentials. Read from env/.env only — never hardcoded."""
+
+    username: str = ""
+    password: str = ""
+    host: str = "urs.earthdata.nasa.gov"
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.username and self.password)
+
+
+@dataclass
 class Settings:
     grid: GridConfig = field(default_factory=GridConfig)
     paths: PathsConfig = field(default_factory=PathsConfig)
@@ -212,5 +225,11 @@ def load_settings(config_path: Path | None = None) -> Settings:
     s.risk = _apply_overrides(raw, "risk", RiskConfig)
     s.alerts = _apply_overrides(raw, "alerts", AlertsConfig)
     s.basemaps = _apply_overrides(raw, "basemaps", BasemapsConfig)
+    s.earthdata = _apply_overrides(raw, "earthdata", EarthdataConfig)
+    # Conventional NASA env-var names also work (e.g. from .env or the shell).
+    if not s.earthdata.username:
+        s.earthdata.username = os.environ.get("EARTHDATA_USERNAME", "")
+    if not s.earthdata.password:
+        s.earthdata.password = os.environ.get("EARTHDATA_PASSWORD", "")
     s.api = _apply_overrides(raw, "api", ApiConfig)
     return s

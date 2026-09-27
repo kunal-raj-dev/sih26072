@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from .base import AtmosphericDataProvider, clip_history_window
 from .imd_radar import ImradarGifProvider, STATION_PRODUCT_PATHS
-from .nwp import GfsNcepProvider, ImergProvider
+from .imerg import ImergProvider
+from .nwp import GfsNcepProvider
 from .sevir import SevirCatalog, SevirReplayEvent, pick_event_with_most_flashes
 from .synthetic import (
     SyntheticEvent,
@@ -19,7 +20,6 @@ __all__ = [
     "GfsNcepProvider",
     "ImergProvider",
     "ImradarGifProvider",
-    "STATION_PRODUCT_PATHS",
     "SevirCatalog",
     "SevirReplayEvent",
     "pick_event_with_most_flashes",

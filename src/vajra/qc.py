@@ -21,6 +21,7 @@ RANGE_RULES: dict[str, tuple[float, float]] = {
     "bt_ir107": (150.0, 350.0),   # K (raw-scale sanity window)
     "bt_ir_proxy": (150.0, 330.0),
     "flash": (0.0, 1e9),
+    "precipitation": (0.0, 500.0),   # IMERG mm/hr
 }
 
 STALE_MAX_AGE_MIN = 90.0
