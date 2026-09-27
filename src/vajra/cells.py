@@ -24,7 +24,7 @@ from .config import CellsConfig
 from .grid import GridSpec, KM_PER_DEG_LAT, haversine_km
 from .ndx import label as cc_label
 from .ndx import dilate
-from .schemas import Cell
+from .schemas import Cell, StormLifecycleState
 
 
 @dataclass
@@ -222,10 +222,150 @@ class Track:
     cell_id: str
     detections: list[Detection] = field(default_factory=list)
     kalman: KalmanFilter2D | None = None
+    prev_v_lat: float = 0.0
+    prev_v_lon: float = 0.0
+    prev_time: datetime | None = None
+    has_initial_vel: bool = False
 
     @property
     def latest(self) -> Detection | None:
         return self.detections[-1] if self.detections else None
+
+
+def compute_kinematic_acceleration(
+    current_vel: tuple[float, float],  # (v_lat, v_lon) in deg/h
+    prev_vel: tuple[float, float],     # (v_lat, v_lon) in deg/h
+    dt_hours: float,
+    lat: float,
+) -> tuple[float, float, float, list[float]]:
+    """Compute kinematic storm acceleration vector a = Delta v / Delta t.
+
+    Parameters
+    ----------
+    current_vel:
+        (v_lat, v_lon) at current step in deg/h.
+    prev_vel:
+        (v_lat, v_lon) at previous step in deg/h.
+    dt_hours:
+        Time delta in hours.
+    lat:
+        Mean latitude in degrees.
+
+    Returns
+    -------
+    (accel_dlat, accel_dlon, accel_kmh2, accel_vector)
+    """
+    dt_h = max(1e-4, dt_hours)
+    a_dlat = (current_vel[0] - prev_vel[0]) / dt_h
+    a_dlon = (current_vel[1] - prev_vel[1]) / dt_h
+    cos_lat = max(0.1, math.cos(math.radians(lat)))
+    ay = a_dlat * KM_PER_DEG_LAT
+    ax = a_dlon * KM_PER_DEG_LAT * cos_lat
+    a_mag = math.sqrt(ax ** 2 + ay ** 2)
+    return float(a_dlat), float(a_dlon), float(a_mag), [round(ax, 2), round(ay, 2)]
+
+
+def detect_lightning_jump(
+    flash_counts_history: list[int] | list[float],
+    min_flash_rate: float = 6.0,
+    sigma_threshold: float = 2.0,
+) -> tuple[bool, float, float]:
+    """Schulz et al. (2009, 2011) 2-Sigma Lightning Jump Detection algorithm.
+
+    A lightning jump is defined as a sudden surge in the flash rate:
+        Delta F >= sigma_threshold * sigma_hist
+    where sigma_hist = sqrt(mean_hist) under Poisson statistics, requiring
+    F_recent >= min_flash_rate (default 6 flashes/min) to suppress Poisson noise at low counts.
+
+    Parameters
+    ----------
+    flash_counts_history:
+        Sequence of historical flash counts or rates, with the last element being recent rate.
+    min_flash_rate:
+        Minimum recent flash count required to trigger a jump (default: 6.0).
+    sigma_threshold:
+        Multiplier for historical standard deviation (default: 2.0).
+
+    Returns
+    -------
+    (is_jump, delta_f, required_threshold)
+    """
+    if not flash_counts_history:
+        return False, 0.0, 0.0
+
+    recent = float(flash_counts_history[-1])
+    if recent < min_flash_rate:
+        return False, 0.0, 0.0
+
+    if len(flash_counts_history) < 2:
+        return True, recent, 0.0
+
+    history = [float(x) for x in flash_counts_history[:-1]]
+    past_rate = float(np.mean(history))
+    delta_f = recent - past_rate
+
+    # Poisson standard deviation
+    sigma_hist = max(1.0, math.sqrt(max(0.0, past_rate)))
+    threshold = sigma_threshold * sigma_hist
+
+    is_jump = bool(delta_f >= threshold and recent >= min_flash_rate)
+    return is_jump, float(round(delta_f, 2)), float(round(threshold, 2))
+
+
+def classify_cell_lifecycle(
+    detections: list[Detection],
+    px_area_km2: float,
+    is_split: bool = False,
+    is_merge: bool = False,
+) -> tuple[StormLifecycleState, float, float]:
+    """Classify storm cell lifecycle stage and compute volumetric growth rates.
+
+    Parameters
+    ----------
+    detections:
+        Chronological list of detections for this track, ending with recent.
+    px_area_km2:
+        Area of one grid pixel in km^2.
+    is_split:
+        True if cell emerged as daughter split from nearby parent.
+    is_merge:
+        True if cell merged multiple antecedent cells into single core.
+
+    Returns
+    -------
+    (lifecycle_state, d_area_dt, d_vil_dt)
+    """
+    if is_split:
+        return StormLifecycleState.SPLIT, 0.0, 0.0
+    if is_merge:
+        return StormLifecycleState.MERGE, 0.0, 0.0
+
+    if not detections or len(detections) <= 1:
+        return StormLifecycleState.INITIATING, 0.0, 0.0
+
+    curr = detections[-1]
+    prev = detections[-2]
+    dt_h = max(1e-4, (curr.time - prev.time).total_seconds() / 3600.0)
+
+    # Area expansion rate in km^2 / h
+    d_area_km2 = (curr.area_px - prev.area_px) * px_area_km2
+    d_area_dt = d_area_km2 / dt_h
+
+    # Core intensity / VIL growth rate in dBZ / h (or raw units / h)
+    d_intensity = curr.max_intensity - prev.max_intensity
+    d_vil_dt = d_intensity / dt_h
+
+    # Classification rules
+    if d_area_dt > 15.0 or d_vil_dt > 5.0:
+        stage = StormLifecycleState.INTENSIFYING
+    elif d_area_dt < -15.0 or d_vil_dt < -5.0:
+        stage = StormLifecycleState.DECAYING
+    elif len(detections) >= 3 or curr.area_px * px_area_km2 >= 60.0 or curr.max_intensity >= 40.0:
+        stage = StormLifecycleState.MATURE
+    else:
+        stage = StormLifecycleState.INITIATING
+
+    return stage, float(round(d_area_dt, 2)), float(round(d_vil_dt, 2))
 
 
 def detect_cells(
@@ -375,6 +515,8 @@ class CellTracker:
 
         max_step = self._max_step_deg()
         unmatched_prev = list(self._prev)
+        split_cell_ids: set[str] = set()
+        merged_cell_ids: set[str] = set()
 
         for det in detections:
             best, best_d = None, 1e9
@@ -399,12 +541,28 @@ class CellTracker:
                 track.detections.append(det)
                 det.track_age = len(track.detections) - 1
                 unmatched_prev.remove(best)
+
+                # Check if another previous cell was close to this detection and got merged
+                for other_p in list(unmatched_prev):
+                    d_other = float(np.hypot(det.centroid_lat - other_p.centroid_lat,
+                                             det.centroid_lon - other_p.centroid_lon))
+                    if d_other <= max_step * 1.2:
+                        merged_cell_ids.add(det.cell_id)
+                        unmatched_prev.remove(other_p)
             else:
                 self._counter += 1
                 det.cell_id = f"C{self._counter:04d}"
                 kf = KalmanFilter2D(det.centroid_lat, det.centroid_lon)
                 self.tracks[det.cell_id] = Track(det.cell_id, [det], kalman=kf)
                 det.track_age = 0
+
+                # Check if this new detection split from an existing active previous cell
+                for p in self._prev:
+                    d_parent = float(np.hypot(det.centroid_lat - p.centroid_lat,
+                                              det.centroid_lon - p.centroid_lon))
+                    if d_parent <= max_step * 1.5:
+                        split_cell_ids.add(det.cell_id)
+                        break
 
         self._prev = detections
 
@@ -438,6 +596,37 @@ class CellTracker:
                 self.grid.lon0 + self.grid.dlon * j1 + self.grid.dlon / 2,
                 self.grid.lat0 + self.grid.dlat * i0 + abs(self.grid.dlat) / 2,
             ]
+
+            # Kinematic acceleration a = Delta v / Delta t
+            if kf and track.has_initial_vel and track.prev_time:
+                dt_accel_h = max(1e-4, (t - track.prev_time).total_seconds() / 3600.0)
+                a_dlat, a_dlon, a_mag, a_vec = compute_kinematic_acceleration(
+                    current_vel=(kf.v_lat, kf.v_lon),
+                    prev_vel=(track.prev_v_lat, track.prev_v_lon),
+                    dt_hours=dt_accel_h,
+                    lat=det.centroid_lat,
+                )
+            else:
+                a_dlat = a_dlon = a_mag = 0.0
+                a_vec = [0.0, 0.0]
+
+            if kf:
+                track.prev_v_lat = kf.v_lat
+                track.prev_v_lon = kf.v_lon
+                track.prev_time = t
+                if len(track.detections) >= 2:
+                    track.has_initial_vel = True
+
+            # Lifecycle classification and volumetric growth rates
+            is_split = det.cell_id in split_cell_ids
+            is_merge = det.cell_id in merged_cell_ids
+            lifecycle, d_area_dt, d_vil_dt = classify_cell_lifecycle(
+                detections=track.detections,
+                px_area_km2=px_area_km2,
+                is_split=is_split,
+                is_merge=is_merge,
+            )
+
             cells.append(Cell(
                 id=det.cell_id, time=t,
                 centroid_lat=det.centroid_lat, centroid_lon=det.centroid_lon,
@@ -454,6 +643,13 @@ class CellTracker:
                 uncertainty_cone=cone_pts,
                 dbz_max=round(det.max_intensity, 1) if det.max_intensity > 20 else 0.0,
                 core_area_km2=round(core_km2, 1),
+                accel_dlat=round(a_dlat, 5),
+                accel_dlon=round(a_dlon, 5),
+                acceleration_kmh2=round(a_mag, 2),
+                acceleration_vector=a_vec,
+                lifecycle_state=lifecycle,
+                d_area_dt=d_area_dt,
+                d_vil_dt=d_vil_dt,
             ))
         return cells
 

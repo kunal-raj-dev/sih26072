@@ -171,6 +171,18 @@ def compute_btd_ir_wv(tir1_k: np.ndarray, wv_k: np.ndarray) -> np.ndarray:
     return (np.asarray(tir1_k, dtype=np.float32) - np.asarray(wv_k, dtype=np.float32))
 
 
+def compute_split_window_btd(tir1_k: np.ndarray, tir2_k: np.ndarray) -> np.ndarray:
+    """Compute Split-Window Brightness Temperature Difference:
+    ΔT_split = T_b(TIR1) - T_b(TIR2) in Kelvin.
+
+    Physical interpretation:
+    - High positive values (+2 K to +6 K): low-level moisture, thin cirrus, or dust.
+    - Near-zero / negative values (-1 K to +1 K): deep, optically thick glaciated cloud tops.
+    - Indicator for convective initiation and cloud optical thickness.
+    """
+    return (np.asarray(tir1_k, dtype=np.float32) - np.asarray(tir2_k, dtype=np.float32))
+
+
 def compute_cooling_rate(
     tir1_curr: np.ndarray,
     tir1_prev: np.ndarray,
@@ -396,6 +408,7 @@ def create_mock_mosdac_hdf5(
     tir1_k = np.full((nlat, nlon), 298.0, dtype=np.float32)
     wv_k = np.full((nlat, nlon), 242.0, dtype=np.float32)
     tir2_k = np.full((nlat, nlon), 296.0, dtype=np.float32)
+    mir_k = np.full((nlat, nlon), 292.0, dtype=np.float32)
 
     # Embed convective cores if requested: (lat, lon, min_temp_k)
     cores = convective_cores or [
@@ -410,6 +423,8 @@ def create_mock_mosdac_hdf5(
         shield = np.exp(-0.5 * (dist / 14.0) ** 2)
         tir1_k = np.minimum(tir1_k, (298.0 - (298.0 - c_temp) * shield).astype(np.float32))
         wv_k = np.minimum(wv_k, (242.0 - (242.0 - (c_temp + 3.0)) * shield).astype(np.float32))
+        tir2_k = np.minimum(tir2_k, (296.0 - (296.0 - (c_temp + 1.0)) * shield).astype(np.float32))
+        mir_k = np.minimum(mir_k, (292.0 - (292.0 - (c_temp + 4.0)) * shield).astype(np.float32))
 
     lats = (g.lat0 + np.arange(nlat) * g.dlat).astype(np.float32)
     lons = (g.lon0 + np.arange(nlon) * g.dlon).astype(np.float32)
@@ -444,12 +459,21 @@ def create_mock_mosdac_hdf5(
             ds_tir2.attrs["Slope"] = 0.2
             ds_tir2.attrs["Intercept"] = 0.0
             ds_tir2.attrs["Units"] = "Counts"
+            ds_tir2.attrs["Central_Wavenumber"] = 833.333
+
+            counts_mir = np.clip(kelvin_to_radiance(mir_k, "MIR") * 50.0, 0, 1023).astype(np.uint16)
+            ds_mir = h5.create_dataset("IMG_MIR", data=counts_mir, compression="gzip")
+            ds_mir.attrs["Slope"] = 0.02
+            ds_mir.attrs["Intercept"] = 0.0
+            ds_mir.attrs["Units"] = "Counts"
+            ds_mir.attrs["Central_Wavenumber"] = 2564.103
         else:
             # Calibrated Kelvin arrays
             ds_tir1 = h5.create_dataset("IMG_TIR1", data=tir1_k)
             ds_tir1.attrs["Units"] = "Kelvin"
             h5.create_dataset("IMG_WV", data=wv_k)
             h5.create_dataset("IMG_TIR2", data=tir2_k)
+            h5.create_dataset("IMG_MIR", data=mir_k)
 
         h5.create_dataset("Latitude", data=lats)
         h5.create_dataset("Longitude", data=lons)
@@ -557,11 +581,47 @@ class MosdacProvider(AtmosphericDataProvider):
                 else:
                     wv_k = counts_to_kelvin(raw_wv, lut=lut_wv, slope=slope_wv, intercept=intercept_wv, channel="WV")
 
+            # 5. Extract TIR2 if present
+            tir2_k = None
+            if "IMG_TIR2" in h5:
+                raw_tir2 = h5["IMG_TIR2"][:]
+                lut_tir2 = h5["IMG_TIR2_LUT"][:] if "IMG_TIR2_LUT" in h5 else None
+                slope_tir2 = float(h5["IMG_TIR2"].attrs.get("Slope", 1.0))
+                intercept_tir2 = float(h5["IMG_TIR2"].attrs.get("Intercept", 0.0))
+                units_tir2 = str(h5["IMG_TIR2"].attrs.get("Units", ""))
+                is_tir2_counts = "count" in units_tir2.lower() or lut_tir2 is not None or slope_tir2 != 1.0 or intercept_tir2 != 0.0
+                if not is_tir2_counts and ("kelvin" in units_tir2.lower() or (150.0 <= np.nanmean(raw_tir2) <= 350.0)):
+                    tir2_k = np.clip(raw_tir2, 150.0, 350.0).astype(np.float32)
+                else:
+                    tir2_k = counts_to_kelvin(raw_tir2, lut=lut_tir2, slope=slope_tir2, intercept=intercept_tir2, channel="TIR2")
+            elif "TIR2" in h5:
+                tir2_k = np.clip(h5["TIR2"][:], 150.0, 350.0).astype(np.float32)
+
+            # 6. Extract MIR if present
+            mir_k = None
+            if "IMG_MIR" in h5:
+                raw_mir = h5["IMG_MIR"][:]
+                lut_mir = h5["IMG_MIR_LUT"][:] if "IMG_MIR_LUT" in h5 else None
+                slope_mir = float(h5["IMG_MIR"].attrs.get("Slope", 1.0))
+                intercept_mir = float(h5["IMG_MIR"].attrs.get("Intercept", 0.0))
+                units_mir = str(h5["IMG_MIR"].attrs.get("Units", ""))
+                is_mir_counts = "count" in units_mir.lower() or lut_mir is not None or slope_mir != 1.0 or intercept_mir != 0.0
+                if not is_mir_counts and ("kelvin" in units_mir.lower() or (150.0 <= np.nanmean(raw_mir) <= 350.0)):
+                    mir_k = np.clip(raw_mir, 150.0, 350.0).astype(np.float32)
+                else:
+                    mir_k = counts_to_kelvin(raw_mir, lut=lut_mir, slope=slope_mir, intercept=intercept_mir, channel="MIR")
+            elif "MIR" in h5:
+                mir_k = np.clip(h5["MIR"][:], 150.0, 350.0).astype(np.float32)
+
             # Resample to canonical 0.1° grid if dimensions differ
             if tir1_k.shape != (self.grid.nlat, self.grid.nlon) and lats is not None and lons is not None:
                 tir1_k = resample_to_india_grid(tir1_k, lats, lons, self.grid)
                 if wv_k is not None:
                     wv_k = resample_to_india_grid(wv_k, lats, lons, self.grid)
+                if tir2_k is not None:
+                    tir2_k = resample_to_india_grid(tir2_k, lats, lons, self.grid)
+                if mir_k is not None:
+                    mir_k = resample_to_india_grid(mir_k, lats, lons, self.grid)
 
             meta = ObsFrameMeta(
                 source=self.name,
@@ -588,6 +648,11 @@ class MosdacProvider(AtmosphericDataProvider):
             if wv_k is not None:
                 aux["wv"] = wv_k
                 aux["btd"] = compute_btd_ir_wv(tir1_k, wv_k)
+            if tir2_k is not None:
+                aux["tir2"] = tir2_k
+                aux["split_window_btd"] = compute_split_window_btd(tir1_k, tir2_k)
+            if mir_k is not None:
+                aux["mir"] = mir_k
 
             return frame, aux
 

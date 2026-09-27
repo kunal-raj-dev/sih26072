@@ -125,6 +125,19 @@ RADAR_STATIONS: dict[str, RadarStation] = {
 
 
 @dataclass
+class RadarPolarSweep:
+    """A single conical polar PPI tilt sweep from a DWR station."""
+
+    station: RadarStation
+    time: datetime
+    elevation_deg: float          # tilt angle above horizon (e.g. 0.5, 1.5, 2.5, 4.5 deg)
+    azimuths_deg: np.ndarray      # 1D array of ray azimuth angles in degrees (0 to 360)
+    ranges_km: np.ndarray         # 1D array of gate range distances in km
+    reflectivity_dbz: np.ndarray  # 2D array of shape (n_azimuths, n_ranges) in dBZ
+    quality_status: QualityStatus = QualityStatus.OK
+
+
+@dataclass
 class RadarVolumeScan:
     """A gridded 2D maximum reflectivity (MaxZ) or sweep scan from one DWR station."""
 
@@ -134,6 +147,92 @@ class RadarVolumeScan:
     grid: GridSpec
     coverage_mask: np.ndarray | None = None  # True where within beam range & unobstructed
     quality_status: QualityStatus = QualityStatus.OK
+
+
+def polar_sweep_to_cartesian(
+    sweep: RadarPolarSweep,
+    target_grid: GridSpec,
+) -> RadarVolumeScan:
+    """Project a conical polar PPI radar sweep onto a regular Cartesian Lat/Lon GridSpec.
+
+    Uses standard radar geometry with 4/3 effective Earth radius refraction:
+        r_eff = 4/3 * R_earth
+        ground_distance = r * cos(elevation)
+    """
+    st = sweep.station
+    nlat, nlon = target_grid.nlat, target_grid.nlon
+
+    # Station coordinates and distance to grid cells
+    dlat = (target_grid.lats[:, None] - st.lat) * KM_PER_DEG_LAT
+    mean_lat_rad = np.radians((target_grid.lats[:, None] + st.lat) / 2.0)
+    dlon = (target_grid.lons[None, :] - st.lon) * KM_PER_DEG_LAT * np.cos(mean_lat_rad)
+    ground_dist_km = np.sqrt(dlat**2 + dlon**2)
+
+    # Azimuth from station to each grid point in degrees (0 = North, 90 = East)
+    azimuth_grid_rad = np.arctan2(dlon, dlat)
+    azimuth_grid_deg = (np.degrees(azimuth_grid_rad) + 360.0) % 360.0
+
+    # Range along beam taking elevation into account: r = ground_dist / cos(elevation)
+    cos_elev = math.cos(math.radians(sweep.elevation_deg))
+    cos_elev = max(cos_elev, 0.1)
+    slant_range_km = ground_dist_km / cos_elev
+
+    # Interpolate from polar grid (azimuth, range) to Cartesian grid
+    r_min = float(sweep.ranges_km[0])
+    r_max = float(sweep.ranges_km[-1])
+    in_range = (slant_range_km >= r_min) & (slant_range_km <= min(r_max, st.max_range_km))
+
+    # Nearest neighbor mapping for speed and preservation of peak reflectivity
+    n_az = len(sweep.azimuths_deg)
+    az_step = 360.0 / max(n_az, 1)
+    az_idx = np.clip(np.round(azimuth_grid_deg / az_step).astype(int) % n_az, 0, n_az - 1)
+
+    n_rg = len(sweep.ranges_km)
+    rg_step = (r_max - r_min) / max(n_rg - 1, 1)
+    rg_idx = np.clip(np.round((slant_range_km - r_min) / max(rg_step, 1e-4)).astype(int), 0, n_rg - 1)
+
+    cartesian_dbz = np.zeros((nlat, nlon), dtype=np.float32)
+    cartesian_dbz[in_range] = sweep.reflectivity_dbz[az_idx[in_range], rg_idx[in_range]]
+
+    return RadarVolumeScan(
+        station=st,
+        time=sweep.time,
+        reflectivity_dbz=cartesian_dbz,
+        grid=target_grid,
+        coverage_mask=in_range,
+        quality_status=sweep.quality_status,
+    )
+
+
+def volume_to_maxz(
+    sweeps: list[RadarPolarSweep],
+    target_grid: GridSpec,
+) -> RadarVolumeScan:
+    """Compute Column-Maximum Reflectivity (MaxZ) across multiple elevation sweeps for one station.
+
+    Adheres to NOAA MRMS / IMD DWR standard column-maximum compositing.
+    """
+    if not sweeps:
+        raise ValueError("Cannot construct MaxZ from empty sweeps list")
+
+    st = sweeps[0].station
+    t = sweeps[0].time
+    max_dbz = np.zeros((target_grid.nlat, target_grid.nlon), dtype=np.float32)
+    total_coverage = np.zeros((target_grid.nlat, target_grid.nlon), dtype=bool)
+
+    for sweep in sweeps:
+        vol = polar_sweep_to_cartesian(sweep, target_grid)
+        np.maximum(max_dbz, vol.reflectivity_dbz, out=max_dbz)
+        if vol.coverage_mask is not None:
+            total_coverage |= vol.coverage_mask
+
+    return RadarVolumeScan(
+        station=st,
+        time=t,
+        reflectivity_dbz=max_dbz,
+        grid=target_grid,
+        coverage_mask=total_coverage,
+    )
 
 
 class RadarMosaicEngine:
@@ -159,6 +258,8 @@ class RadarMosaicEngine:
         target_grid: GridSpec,
         method: Literal["max", "cressman", "nearest"] = "max",
         min_dbz: float = 5.0,
+        cressman_radius_km: float | None = None,
+        station_weights: dict[str, float] | None = None,
     ) -> tuple[np.ndarray, dict[str, Any]]:
         """Combine overlapping radar scans into a single composite mosaic grid.
 
@@ -174,6 +275,10 @@ class RadarMosaicEngine:
             "nearest": Strict nearest-station selection.
         min_dbz:
             Threshold below which echoes are treated as clear air / zero.
+        cressman_radius_km:
+            Optional Cressman influence radius R in km (default: station.max_range_km).
+        station_weights:
+            Optional dictionary mapping station_id to scalar weight multiplier.
 
         Returns
         -------
@@ -184,7 +289,14 @@ class RadarMosaicEngine:
         """
         if not scans:
             empty = np.zeros((target_grid.nlat, target_grid.nlon), dtype=np.float32)
-            return empty, {"stations_used": [], "max_dbz": 0.0, "mean_dbz": 0.0, "overlap_area_km2": 0.0}
+            return empty, {
+                "stations_used": [],
+                "max_dbz": 0.0,
+                "mean_dbz": 0.0,
+                "overlap_area_km2": 0.0,
+                "radar_available": False,
+                "radar_unavailable": True,
+            }
 
         nlat, nlon = target_grid.nlat, target_grid.nlon
         accum_dbz = np.zeros((nlat, nlon), dtype=np.float64)
@@ -225,11 +337,15 @@ class RadarMosaicEngine:
             nearest_dbz_grid[closer] = raw_dbz[closer]
 
             # 3. Cressman distance-weighting accumulator
-            # Weight: w(d) = (R_max^2 - d^2) / (R_max^2 + d^2)
-            r_max_sq = st.max_range_km ** 2
+            # Weight: w(d) = (R^2 - d^2) / (R^2 + d^2) for d <= R
+            r_cress = cressman_radius_km if cressman_radius_km is not None else st.max_range_km
+            r_max_sq = r_cress ** 2
             d_sq = np.clip(dist_km ** 2, 0, r_max_sq)
+            in_cress = in_range & (dist_km <= r_cress)
             w = np.zeros_like(dist_km)
-            w[in_range] = (r_max_sq - d_sq[in_range]) / (r_max_sq + d_sq[in_range] + 1e-6)
+            w[in_cress] = (r_max_sq - d_sq[in_cress]) / (r_max_sq + d_sq[in_cress] + 1e-6)
+            if station_weights and st.id in station_weights:
+                w = w * station_weights[st.id]
 
             accum_dbz += raw_dbz * w
             accum_weights += w
@@ -272,9 +388,34 @@ class RadarMosaicEngine:
             "convective_area_km2": float(round(len(convective_echoes) * px_area_km2, 1)),
             "overlap_area_km2": float(round(overlap_area_km2, 1)),
             "overlap_fraction": float(round(np.count_nonzero(multi_coverage) / max(1, np.count_nonzero(coverage_counts > 0)), 3)),
+            "radar_available": bool(np.any(coverage_counts > 0)),
+            "radar_unavailable": bool(np.any(coverage_counts == 0)),
         }
 
         return result, meta
+
+    def composite_polar_sweeps(
+        self,
+        sweeps_by_station: dict[str, list[RadarPolarSweep]],
+        target_grid: GridSpec,
+        method: Literal["max", "cressman", "nearest"] = "max",
+        min_dbz: float = 5.0,
+        cressman_radius_km: float | None = None,
+        station_weights: dict[str, float] | None = None,
+    ) -> tuple[np.ndarray, dict[str, Any]]:
+        """Project multi-station polar sweeps to MaxZ and composite into a unified Cartesian mosaic."""
+        scans: list[RadarVolumeScan] = []
+        for _, sweeps in sweeps_by_station.items():
+            if sweeps:
+                scans.append(volume_to_maxz(sweeps, target_grid))
+        return self.composite(
+            scans,
+            target_grid=target_grid,
+            method=method,
+            min_dbz=min_dbz,
+            cressman_radius_km=cressman_radius_km,
+            station_weights=station_weights,
+        )
 
     def _resample_grid(self, src: np.ndarray, src_grid: GridSpec, dst_grid: GridSpec) -> np.ndarray:
         """Bilinear spatial resampling of a 2D field between regular lat/lon grids."""
@@ -409,3 +550,67 @@ def simulate_synthetic_radar_scan(
         grid=grid,
         coverage_mask=coverage_mask,
     )
+
+
+def simulate_synthetic_polar_sweep(
+    station: RadarStation,
+    storm_cores: list[tuple[float, float, float, float]],  # (lat, lon, peak_dbz, radius_km)
+    elevation_deg: float = 0.5,
+    n_azimuths: int = 360,
+    max_range_km: float = 250.0,
+    range_step_km: float = 1.0,
+    time: datetime | None = None,
+    noise_sigma: float = 0.5,
+    seed: int = 42,
+) -> RadarPolarSweep:
+    """Generate realistic conical polar sweep data with simulated convective cores."""
+    t = time or datetime.now(timezone.utc)
+    rng = np.random.default_rng(seed + hash(station.id) % 8191)
+
+    azimuths_deg = np.linspace(0.0, 360.0 - 360.0 / n_azimuths, n_azimuths, dtype=np.float32)
+    ranges_km = np.arange(1.0, max_range_km + range_step_km, range_step_km, dtype=np.float32)
+
+    n_az = len(azimuths_deg)
+    n_rg = len(ranges_km)
+    reflectivity = np.zeros((n_az, n_rg), dtype=np.float32)
+
+    cos_elev = max(0.1, math.cos(math.radians(elevation_deg)))
+    ground_r = ranges_km * cos_elev
+    sin_elev = math.sin(math.radians(elevation_deg))
+    beam_h_km = ranges_km * sin_elev + (ranges_km ** 2) / (2.0 * 1.333 * 6371.0)
+
+    az_rad = np.radians(azimuths_deg)[:, None]  # (n_az, 1)
+    gr_km = ground_r[None, :]                   # (1, n_rg)
+
+    # Gate coordinates relative to station
+    dlat_gate = gr_km * np.cos(az_rad) / KM_PER_DEG_LAT
+    gate_lat = station.lat + dlat_gate
+    mean_lat_rad = np.radians((gate_lat + station.lat) / 2.0)
+    dlon_gate = gr_km * np.sin(az_rad) / (KM_PER_DEG_LAT * np.cos(mean_lat_rad))
+    gate_lon = station.lon + dlon_gate
+
+    for clat, clon, peak_dbz, radius_km in storm_cores:
+        dlat_km = (gate_lat - clat) * KM_PER_DEG_LAT
+        dlon_km = (gate_lon - clon) * KM_PER_DEG_LAT * np.cos(np.radians(clat))
+        dist_storm_km = np.sqrt(dlat_km ** 2 + dlon_km ** 2)
+
+        # Convective vertical profile: peak in lower troposphere, decaying aloft
+        v_factor = np.exp(-0.5 * (np.maximum(0.0, beam_h_km[None, :] - 2.0) / 4.0) ** 2)
+        echo = peak_dbz * np.exp(-0.5 * (dist_storm_km / max(radius_km, 1.0)) ** 2) * v_factor
+        reflectivity = np.maximum(reflectivity, echo.astype(np.float32))
+
+    if noise_sigma > 0:
+        noise = rng.normal(0.0, noise_sigma, (n_az, n_rg)).astype(np.float32)
+        reflectivity = np.where(reflectivity > 5.0, reflectivity + noise, reflectivity)
+
+    reflectivity = np.clip(reflectivity, 0.0, 75.0)
+
+    return RadarPolarSweep(
+        station=station,
+        time=t,
+        elevation_deg=elevation_deg,
+        azimuths_deg=azimuths_deg,
+        ranges_km=ranges_km,
+        reflectivity_dbz=reflectivity,
+    )
+

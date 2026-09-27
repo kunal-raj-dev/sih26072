@@ -180,6 +180,8 @@ class AlertEngine:
                     severity=sev,
                     preset=preset_name,
                     now=forecast.replay_time,
+                    has_jump=has_jump,
+                    affected_blocks=affected_blocks,
                 )
                 if should_suppress:
                     continue
@@ -239,7 +241,17 @@ class AlertEngine:
                 )
                 alerts.append(alert)
                 self._recent.append(
-                    (cell.id, region_name, sev, imd_stage, preset_name, forecast.replay_time, alert.id)
+                    (
+                        cell.id,
+                        region_name,
+                        tuple(affected_blocks),
+                        sev,
+                        imd_stage,
+                        preset_name,
+                        forecast.replay_time,
+                        alert.id,
+                        has_jump,
+                    )
                 )
 
         return alerts
@@ -251,27 +263,38 @@ class AlertEngine:
         severity: str,
         preset: str,
         now: datetime,
+        has_jump: bool = False,
+        affected_blocks: list[str] | None = None,
     ) -> tuple[bool, bool, str]:
-        """Check whether an alert is suppressed, or bypasses suppression due to severity escalation.
+        """Check whether an alert is suppressed, or bypasses suppression due to severity escalation or 2-sigma jump.
 
         Returns:
             (should_suppress, is_update, prior_alert_id)
         """
         curr_rank = SEVERITY_RANK.get(severity, 0)
         window_seconds = self.cfg.suppression_minutes * 60
+        blocks_set = set(affected_blocks) if affected_blocks else set()
 
-        for (cid, rkey, prev_sev, _prev_imd, pre, issued, prev_id) in reversed(self._recent):
-            if (cid == cell_id or rkey == region_key) and pre == preset:
+        for item in reversed(self._recent):
+            if len(item) == 9:
+                cid, rkey, prev_blocks, prev_sev, _prev_imd, pre, issued, prev_id, prev_jump = item
+            else:
+                cid, rkey, prev_sev, _prev_imd, pre, issued, prev_id = item[:7]
+                prev_blocks, prev_jump = (), False
+
+            match_block = bool(blocks_set and any(b in prev_blocks for b in blocks_set))
+            if (cid == cell_id or rkey == region_key or match_block) and pre == preset:
                 elapsed_sec = (now - issued).total_seconds()
                 if elapsed_sec < window_seconds:
                     prev_rank = SEVERITY_RANK.get(prev_sev, 0)
-                    if curr_rank > prev_rank:
-                        # Severity escalated (e.g. Yellow -> Orange, or Orange -> Red)!
-                        # Immediately bypass suppression and issue an Update!
+                    # 1. 2-sigma lightning jump rate acceleration overrides suppression immediately!
+                    if has_jump and not prev_jump:
                         return False, True, prev_id
-                    else:
-                        # Same or lower severity within suppression window: suppress duplicate
-                        return True, False, ""
+                    # 2. Severity level escalated (e.g. Advisory -> Watch, or Watch -> Warning)!
+                    if curr_rank > prev_rank:
+                        return False, True, prev_id
+                    # 3. Same or lower severity within suppression window: suppress duplicate
+                    return True, False, ""
                 break
 
         return False, False, ""

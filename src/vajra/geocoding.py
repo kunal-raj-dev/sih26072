@@ -224,6 +224,98 @@ class SpatialIndex:
         intersections.sort(key=lambda x: x.overlap_fraction, reverse=True)
         return intersections
 
+    def intersect_cells(
+        self,
+        cells: list[Cell],
+        min_overlap_fraction: float = 0.10,
+    ) -> dict[str, list[AdminIntersection]]:
+        """Batch find administrative blocks intersecting multiple storm cells.
+
+        Leverages Shapely 2.x STRtree batch query (vectorized array of geometries)
+        to achieve < 15 ms latency for 10+ convective storm cells against all block polygons.
+
+        Returns:
+            Dictionary mapping cell.id -> sorted list of AdminIntersection.
+        """
+        if not self._block_tree or not cells:
+            return {cell.id: [] for cell in cells}
+
+        results: dict[str, list[AdminIntersection]] = {cell.id: [] for cell in cells}
+        valid_cells: list[tuple[Cell, Any, Point]] = []
+        cell_geoms = []
+
+        for cell in cells:
+            if not cell.bbox or len(cell.bbox) < 4:
+                continue
+            min_lon, min_lat, max_lon, max_lat = cell.bbox
+            c_geom = box(min_lon, min_lat, max_lon, max_lat)
+            c_pt = Point(cell.centroid_lon, cell.centroid_lat)
+            valid_cells.append((cell, c_geom, c_pt))
+            cell_geoms.append(c_geom)
+
+        if not cell_geoms:
+            return results
+
+        # STRtree.query with a list of geometries returns shape (2, N):
+        # row 0 contains indices into cell_geoms, row 1 contains indices into tree blocks
+        pairs = self._block_tree.query(cell_geoms)
+        if pairs.size == 0:
+            return results
+
+        for cell_idx, block_idx in zip(pairs[0], pairs[1]):
+            cell, cell_geom, centroid = valid_cells[cell_idx]
+            block = self.blocks[block_idx]
+
+            if not cell_geom.intersects(block.geometry):
+                continue
+
+            try:
+                inter = cell_geom.intersection(block.geometry)
+                if inter.is_empty:
+                    continue
+                block_area = block.geometry.area
+                inter_area = inter.area
+                frac = float(inter_area / block_area) if block_area > 0 else 0.0
+                sqkm = float(inter_area * 111.32 * 111.32)
+
+                is_contained = block.geometry.contains(centroid)
+                if frac >= min_overlap_fraction or is_contained:
+                    exposure_ratio = min(1.0, max(0.15 if is_contained else 0.05, frac))
+                    pop_exposed = int(round(block.population * exposure_ratio))
+                    results[cell.id].append(
+                        AdminIntersection(
+                            entity=block,
+                            overlap_area_sqkm=round(sqkm, 2),
+                            overlap_fraction=round(frac, 3),
+                            exposed_population=pop_exposed,
+                        )
+                    )
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("batch geometry intersection error: %s", exc)
+                continue
+
+        # Sort each cell's intersections by overlap fraction descending
+        for cell_id in results:
+            results[cell_id].sort(key=lambda x: x.overlap_fraction, reverse=True)
+
+        return results
+
+    def query_blocks_in_bbox(
+        self,
+        bbox: tuple[float, float, float, float],
+    ) -> list[AdminEntity]:
+        """Find all administrative blocks intersecting the given bbox (minlon, minlat, maxlon, maxlat)."""
+        if not self._block_tree or len(bbox) < 4:
+            return []
+        box_geom = box(bbox[0], bbox[1], bbox[2], bbox[3])
+        candidate_indices = self._block_tree.query(box_geom)
+        matches: list[AdminEntity] = []
+        for idx in candidate_indices:
+            block = self.blocks[idx]
+            if box_geom.intersects(block.geometry):
+                matches.append(block)
+        return matches
+
     def format_region_name(
         self,
         intersections: list[AdminIntersection] | list[AdminEntity],
@@ -269,3 +361,4 @@ class SpatialIndex:
             if f.get("properties", {}).get("district", "").lower() == district.lower()
         ]
         return {"type": "FeatureCollection", "features": features}
+

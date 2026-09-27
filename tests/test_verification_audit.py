@@ -334,3 +334,50 @@ def test_run_case_studies_cli(tmp_path):
     assert out_md.exists()
     assert out_json.stat().st_size > 500
     assert out_md.stat().st_size > 500
+
+
+# ---------------------------------------------------------------------------
+# 9. Held-Out SEVIR S810646 Benchmark Verification Gate Test
+# ---------------------------------------------------------------------------
+def test_sevir_s810646_held_out_benchmark():
+    """Verify held-out benchmark tornadic squall line S810646 achieves BSS >= +0.45 and FAR <= 0.15."""
+    settings = load_settings()
+    store = Store(settings)
+
+    cs = get_case_study("sevir_s810646")
+    assert cs is not None
+    assert cs.regime.startswith("Held-out SOTA Benchmark")
+    assert cs.mode == "REPLAY"
+
+    from vajra.api.app import _ensure_pipeline, _register_available_events
+    _register_available_events(settings, store)
+    state: dict = {}
+    pipeline, event, sources = _ensure_pipeline(cs.event_id, settings, store, state)
+
+    # Run 8 cycles of replay on held-out genuine SEVIR radar & lightning data
+    t_end = min(event.time_end, event.time_start + timedelta(minutes=8 * 10))
+    run = pipeline.run_replay(event, event.time_start, t_end)
+    store.put_run(run)
+    assert run.cycles >= 8
+    assert len(run.alerts) > 0
+
+    v = store.get_verification(run.id)
+    assert v is not None
+    s_list = v["samples"].get("30", [])
+    assert len(s_list) > 100
+
+    p = np.array([x["p"] for x in s_list], dtype=float)
+    y = np.array([x["y"] for x in s_list], dtype=float)
+
+    h, m, fa, cn = contingency(p, y, threshold=0.35)
+    pod, far, csi = pod_far_csi(h, m, fa)
+
+    # Climatological background prevalence for non-convective conditions
+    climo_ref = np.full_like(y, 0.05, dtype=float)
+    bss_climo = brier_skill_score(p, y, climo_ref)
+
+    # Formal Verification Gate Assertions
+    assert far <= 0.15, f"Expected FAR <= 0.15, got {far:.4f}"
+    assert bss_climo >= 0.45, f"Expected BSS >= +0.45 vs Climatology, got {bss_climo:.4f}"
+    assert roc_auc_score(p, y) > 0.85, f"Expected ROC-AUC > 0.85, got {roc_auc_score(p, y):.4f}"
+

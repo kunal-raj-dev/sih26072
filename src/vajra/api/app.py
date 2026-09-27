@@ -84,6 +84,12 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
     mosdac = MosdacProvider(settings)
     lis = LisProvider(settings)
 
+    from ..workers import IngestionWorker, SlidingBuffer
+    sliding_buffer = SlidingBuffer(max_retention_minutes=240)
+    ingestion_worker = IngestionWorker(settings, buffer=sliding_buffer)
+    state["sliding_buffer"] = sliding_buffer
+    state["ingestion_worker"] = ingestion_worker
+
     # ---- health ------------------------------------------------------------
     @app.get("/api/v1/health")
     def health() -> dict:
@@ -670,6 +676,19 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
             "indices": stats,
         }
 
+    # ---- asynchronous workers & buffer diagnostics --------------------------
+    @app.get("/api/v1/workers/status")
+    def worker_status() -> dict:
+        return ingestion_worker.status()
+
+    @app.post("/api/v1/workers/poll")
+    def worker_poll() -> dict:
+        return ingestion_worker.poll_all_once()
+
+    @app.on_event("shutdown")
+    def shutdown_workers() -> None:
+        ingestion_worker.stop()
+
     # ---- static frontend ---------------------------------------------------------
     web = settings.web_dist
     if web.exists():
@@ -695,8 +714,7 @@ def _register_available_events(settings: Settings, store: Store) -> None:
         _synthetic_event(settings, store)
     from ..case_studies import list_case_studies
     for cs in list_case_studies():
-        if store.get_event(cs.event_id) is None:
-            store.put_event(cs.to_event())
+        store.put_event(cs.to_event())
     events_dir = settings.data_root / "external" / "sevir" / "events"
     if events_dir.exists():
         for npz in sorted(events_dir.glob("*.npz")):

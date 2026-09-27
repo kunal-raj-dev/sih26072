@@ -155,6 +155,47 @@ class MosdacConfig:
 
 
 @dataclass
+class V2ModelsConfig:
+    backbone: str = "attention_unet"  # "unet", "attention_unet", "hybrid"
+    patch_size: int = 192
+    alpha_focal: float = 0.25
+    gamma_focal: float = 2.0
+    lambda_dice: float = 0.5
+
+
+@dataclass
+class MosaicConfig:
+    station_weights: dict[str, float] = field(
+        default_factory=lambda: {
+            "patna": 1.0,
+            "kolkata": 1.0,
+            "ranchi": 1.0,
+            "delhi": 1.0,
+        }
+    )
+    max_range_km: float = 250.0
+    cressman_radius_km: float = 10.0
+
+
+@dataclass
+class CIConfig:
+    cooling_rate_threshold_k_per_15m: float = -4.0
+    freezing_level_k: float = 273.15
+    split_window_diff_k: float = -1.0
+    min_area_km2: float = 15.0
+
+
+@dataclass
+class ImpactConfig:
+    vulnerability_weight: float = 1.0
+    population_exposure_threshold: int = 50000
+    rural_labor_multiplier: float = 1.5
+    rural_labor_start_hour: int = 11
+    rural_labor_end_hour: int = 17
+    rural_labor_gating: bool = True
+
+
+@dataclass
 class Settings:
     grid: GridConfig = field(default_factory=GridConfig)
     paths: PathsConfig = field(default_factory=PathsConfig)
@@ -167,6 +208,10 @@ class Settings:
     earthdata: EarthdataConfig = field(default_factory=EarthdataConfig)
     mosdac: MosdacConfig = field(default_factory=MosdacConfig)
     api: ApiConfig = field(default_factory=ApiConfig)
+    v2_models: V2ModelsConfig = field(default_factory=V2ModelsConfig)
+    mosaic: MosaicConfig = field(default_factory=MosaicConfig)
+    ci: CIConfig = field(default_factory=CIConfig)
+    impact: ImpactConfig = field(default_factory=ImpactConfig)
     config_path: Path | None = None
 
     @property
@@ -213,6 +258,19 @@ def _apply_overrides(raw: dict, section: str, target: Any) -> Any:
             val = [RiskBand(**b) for b in val]
         elif f.name == "xgb" and isinstance(val, dict):
             val = XGBConfig(**val)
+        elif isinstance(val, str):
+            if f.type in (int, "int"):
+                try:
+                    val = int(val)
+                except ValueError:
+                    pass
+            elif f.type in (float, "float"):
+                try:
+                    val = float(val)
+                except ValueError:
+                    pass
+            elif f.type in (bool, "bool"):
+                val = val.lower() in ("true", "1", "yes")
         kwargs[f.name] = val
     return target(**kwargs)
 
@@ -252,4 +310,8 @@ def load_settings(config_path: Path | None = None) -> Settings:
     if not s.mosdac.password:
         s.mosdac.password = os.environ.get("MOSDAC_PASSWORD", "")
     s.api = _apply_overrides(raw, "api", ApiConfig)
+    s.v2_models = _apply_overrides(raw, "v2_models", V2ModelsConfig)
+    s.mosaic = _apply_overrides(raw, "mosaic", MosaicConfig)
+    s.ci = _apply_overrides(raw, "ci", CIConfig)
+    s.impact = _apply_overrides(raw, "impact", ImpactConfig)
     return s

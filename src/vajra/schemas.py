@@ -10,7 +10,7 @@ from enum import Enum
 from typing import Any, Literal
 
 import numpy as np
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 
 def utcnow() -> datetime:
@@ -19,6 +19,22 @@ def utcnow() -> datetime:
 
 def iso(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
+class HazardType(str, Enum):
+    LIGHTNING = "LIGHTNING"
+    SEVERE_THUNDERSTORM = "SEVERE_THUNDERSTORM"
+    HAIL = "HAIL"
+    CONVECTIVE_INITIATION = "CONVECTIVE_INITIATION"
+
+
+class StormLifecycleState(str, Enum):
+    INITIATING = "INITIATING"
+    INTENSIFYING = "INTENSIFYING"
+    MATURE = "MATURE"
+    DECAYING = "DECAYING"
+    SPLIT = "SPLIT"
+    MERGE = "MERGE"
 
 
 class DataMode(str, Enum):
@@ -45,9 +61,12 @@ class QualityStatus(str, Enum):
 
 class FallbackRung(str, Enum):
     FULL_FUSION = "FULL_FUSION"
+    FULL_MULTIMODAL = "FULL_MULTIMODAL"
     REDUCED_MODALITY = "REDUCED_MODALITY"
     PHYSICS_BASELINE = "PHYSICS_BASELINE"
+    SATELLITE_SURFACE = "SATELLITE_SURFACE"
     PERSISTENCE = "PERSISTENCE"
+    KINEMATIC_PERSISTENCE = "KINEMATIC_PERSISTENCE"
     CLIMATOLOGY = "CLIMATOLOGY"
 
 
@@ -129,6 +148,14 @@ class Cell(BaseModel):
     uncertainty_cone: list[list[float]] = Field(default_factory=list) # polygon [[lon, lat], ...]
     dbz_max: float = 0.0
     core_area_km2: float = 0.0
+    lifecycle_state: StormLifecycleState = StormLifecycleState.INITIATING
+    lightning_jump_times: list[datetime] = Field(default_factory=list)
+    accel_dlat: float = 0.0
+    accel_dlon: float = 0.0
+    acceleration_kmh2: float = 0.0
+    acceleration_vector: list[float] = Field(default_factory=lambda: [0.0, 0.0])
+    d_area_dt: float = 0.0
+    d_vil_dt: float = 0.0
 
 
 class CICandidate(BaseModel):
@@ -143,9 +170,15 @@ class CICandidate(BaseModel):
     estimated_lead_min: int = 30  # typical lead time to first flash: 15-45 min
     area_km2: float = 0.0
     polygon: list[list[float]] = Field(default_factory=list)  # [[lon, lat], ...]
+    split_window_btd_k: float | None = None
+    u_kmh: float = 0.0
+    v_kmh: float = 0.0
+    tracked_cycles: int = 1
 
 
 class ForecastStep(BaseModel):
+    model_config = {"arbitrary_types_allowed": True}
+
     valid_time: datetime
     lead_minutes: int
     p_flash_max: float
@@ -153,6 +186,16 @@ class ForecastStep(BaseModel):
     field_ref: str = ""          # path/URL of rendered field artifact (PNG/npz)
     uncertainty_p_mean: float = 0.0
     cells: list[Cell] = Field(default_factory=list)
+    p_flash_grid: Any = None
+    p_storm_grid: Any = None
+    p_ci_grid: Any = None
+    uncertainty_grid: Any = None
+
+    @field_serializer("p_flash_grid", "p_storm_grid", "p_ci_grid", "uncertainty_grid")
+    def _serialize_grids(self, v: Any) -> Any:
+        if isinstance(v, np.ndarray):
+            return v.tolist()
+        return v
 
 
 class Forecast(BaseModel):
@@ -181,7 +224,7 @@ class Alert(BaseModel):
     valid_from: datetime
     valid_until: datetime
     severity: Literal["ADVISORY", "WATCH", "WARNING"]
-    hazard: Literal["LIGHTNING", "THUNDERSTORM"]
+    hazard: HazardType | Literal["LIGHTNING", "THUNDERSTORM", "SEVERE_THUNDERSTORM", "HAIL", "CONVECTIVE_INITIATION"] | str
     region_name: str
     bbox: list[float]
     probability: float

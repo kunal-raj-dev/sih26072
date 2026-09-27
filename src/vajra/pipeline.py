@@ -20,7 +20,7 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 
 from .alerts import AlertEngine
-from .cells import CellTracker
+from .cells import CellTracker, detect_lightning_jump
 from .config import Settings
 from .features import FEATURE_NAMES, build_features
 from .geocoding import SpatialIndex
@@ -79,6 +79,7 @@ class NowcastPipeline:
         self._store = None
         self._last_fields: dict[int, tuple[np.ndarray, bytes]] = {}
         self._last_issue: tuple = (None, None, None, [])
+        self._prev_ci_candidates: list = []
 
     def attach_store(self, store) -> None:  # type: ignore[no-untyped-def]
         self._store = store
@@ -238,14 +239,16 @@ class NowcastPipeline:
                            flash_radius_km=self.settings.cells.flash_radius_km)
 
         # Convective Initiation (CI) precursor detection from satellite & radar frames
-        from .models.ci import extract_ci_candidates_from_cycle
+        from .models.ci import extract_ci_candidates_from_cycle, generate_ci_probability_grid
         from .models.field_nowcast import compute_spatial_uncertainty_field, render_uncertainty_png
 
         ci_candidates = extract_ci_candidates_from_cycle(
             satellite_frames=satellite_for_feats,
             radar_frames=radar_for_feats,
             grid=grid,
+            history_candidates=self._prev_ci_candidates,
         )
+        self._prev_ci_candidates = ci_candidates
 
         steps: list[ForecastStep] = []
         fields: dict[int, tuple[np.ndarray, bytes]] = {}
@@ -258,6 +261,9 @@ class NowcastPipeline:
             p_grid = routed.output.p_grid
             p_max = float(np.max(p_grid)) if p_grid is not None and p_grid.size else 0.0
             band = band_for_probability(p_max, self.settings.risk)
+
+            # 2D Convective Initiation probability plume field
+            p_ci_grid = generate_ci_probability_grid(ci_candidates, grid, lead_minutes=lead)
 
             # Spatial uncertainty field
             if p_grid is not None and p_grid.size:
@@ -272,12 +278,16 @@ class NowcastPipeline:
                 if uncertainty_png is None or lead == 30:
                     uncertainty_png = render_uncertainty_png(u_grid)
             else:
+                u_grid = None
                 u_mean = 0.0
 
             steps.append(ForecastStep(valid_time=t + timedelta(minutes=lead),
                                       lead_minutes=lead, p_flash_max=round(p_max, 3),
                                       risk_band=band, uncertainty_p_mean=round(u_mean, 3),
-                                      cells=cells))
+                                      cells=cells,
+                                      p_flash_grid=p_grid,
+                                      p_ci_grid=p_ci_grid,
+                                      uncertainty_grid=u_grid))
             p_by_lead[lead] = dict(routed.output.p_cell)
             rung_by_lead[lead] = routed.rung
             if p_grid is not None:
@@ -317,8 +327,13 @@ class NowcastPipeline:
                 f10 = float(r.get("flash_cnt_10", 0) or 0)
                 f30 = float(r.get("flash_cnt_30", 0) or 0)
                 past_rate = (f30 - f10) / 2.0
-                if f10 >= 6 and (past_rate == 0 or f10 > past_rate + 2.0 * max(1.0, float(np.sqrt(past_rate)))):
-                    jump_cells.add(str(r["_cell_id"]))
+                is_jump, _, _ = detect_lightning_jump([past_rate, f10], min_flash_rate=6.0, sigma_threshold=2.0)
+                if is_jump:
+                    cid = str(r["_cell_id"])
+                    jump_cells.add(cid)
+                    matching_cell = next((c for c in cells if c.id == cid), None)
+                    if matching_cell and t not in matching_cell.lightning_jump_times:
+                        matching_cell.lightning_jump_times.append(t)
 
         alerts = self.alert_engine.generate(forecast, cells,
                                             lead_minutes=max(p_by_lead) if p_by_lead else None,
@@ -345,6 +360,7 @@ class NowcastPipeline:
         step = step_minutes or max(10, self.settings.replay.cycle_minutes)
         self._active_grid = None
         self.tracker = None
+        self._prev_ci_candidates = []
         self.alert_engine.reset()
         run = InferenceRun(event_id=event.id)
         max_lead = max(self.settings.replay.lead_minutes)

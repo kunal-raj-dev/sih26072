@@ -14,6 +14,7 @@ from __future__ import annotations
 import io
 import logging
 import math
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -21,9 +22,28 @@ import scipy.ndimage as ndi
 from PIL import Image
 
 from ..grid import GridSpec
-from ..schemas import Cell, CICandidate
+from ..schemas import Cell, CICandidate, StormLifecycleState
 
 logger = logging.getLogger(__name__)
+
+
+def get_lifecycle_tau_decay(lifecycle_state: StormLifecycleState | str | None) -> float:
+    """Return exponential predictability decay timescale tau in minutes.
+
+    Research basis:
+    - Initiating cells have rapid evolution and shorter predictability (tau = 45 min).
+    - Intensifying / Decaying cells have intermediate predictability (tau = 60 min).
+    - Mature cells and organized squall lines have longer dynamical coherence (tau = 75 min).
+    """
+    if lifecycle_state is None:
+        return 60.0
+    state_str = str(getattr(lifecycle_state, "value", lifecycle_state)).upper()
+    if state_str in ("INITIATING", "SPLIT"):
+        return 45.0
+    elif state_str in ("MATURE", "MERGE"):
+        return 75.0
+    else:  # INTENSIFYING, DECAYING, etc.
+        return 60.0
 
 
 def generate_continuous_probability_field(
@@ -39,7 +59,8 @@ def generate_continuous_probability_field(
     """Generate a smooth, continuous 2D probability field P(x, y) on the canonical grid.
 
     Eliminates rectangular step-function box artifacts by utilizing anisotropic
-    spatial Gaussian kernels centered at cell centroids or directly consuming
+    spatial Gaussian kernels oriented along the storm motion vector (sigma_parallel = 2.5 * sigma_perp)
+    to represent downwind anvil blow-off accurately, or directly consuming
     the deep U-Net continuous probability field.
     """
     h, w = grid.nlat, grid.nlon
@@ -69,20 +90,50 @@ def generate_continuous_probability_field(
             if not (-10 <= cy_px <= h + 10 and -10 <= cx_px <= w + 10):
                 continue
 
-            # Spatial extent from bounding box or cell area
+            # Base perpendicular spatial scale from cell area or bounding box
             lat_span = abs(cell.bbox[3] - cell.bbox[1])
             lon_span = abs(cell.bbox[2] - cell.bbox[0])
-            sigma_y = max(1.5, float(lat_span / (2.0 * abs(grid.dlat))))
-            sigma_x = max(1.5, float(lon_span / (2.0 * abs(grid.dlon))))
+            r_from_area = math.sqrt(max(4.0, float(cell.area_px)) / math.pi)
+            sigma_perp = max(1.5, min(r_from_area, float(lat_span / (2.0 * abs(grid.dlat)))))
+            sigma_parallel = 2.5 * sigma_perp
 
-            # Evaluate continuous anisotropic Gaussian kernel
-            # Distances normalized by spatial sigma
-            dist_sq = ((grid_y - cy_px) / sigma_y) ** 2 + ((grid_x - cx_px) / sigma_x) ** 2
-            # Restrict kernel calculation to 3-sigma bounding region for speed
+            # Storm motion direction in grid pixel coordinates
+            if cell.velocity_kmh > 1.0:
+                head_rad = math.radians(cell.heading_deg)
+                u_dir = math.sin(head_rad)
+                v_dir = math.cos(head_rad)
+                mx = u_dir / (abs(grid.dlon) * 111.12 * max(0.1, math.cos(math.radians(cell.centroid_lat))))
+                my = v_dir / (abs(grid.dlat) * 111.12)
+                if grid.dlat < 0:
+                    my = -my
+            elif abs(cell.motion_dlon) > 1e-4 or abs(cell.motion_dlat) > 1e-4:
+                mx = cell.motion_dlon / grid.dlon
+                my = cell.motion_dlat / grid.dlat
+            else:
+                mx = 0.0
+                my = 0.0
+
+            s_mag = math.hypot(mx, my)
+            dx = grid_x - cx_px
+            dy = grid_y - cy_px
+
+            if s_mag > 1e-3:
+                # Rotated coordinates: parallel along motion, perpendicular across
+                ux = mx / s_mag
+                uy = my / s_mag
+                d_par = dx * ux + dy * uy
+                d_perp = -dx * uy + dy * ux
+
+                # Downwind anvil blow-off asymmetry (sigma_parallel = 2.5 * sigma_perp downwind)
+                sig_par = np.where(d_par > 0, sigma_parallel, sigma_perp)
+                dist_sq = (d_par / sig_par) ** 2 + (d_perp / sigma_perp) ** 2
+            else:
+                dist_sq = (dx / sigma_perp) ** 2 + (dy / sigma_perp) ** 2
+
             kernel = np.exp(-0.5 * dist_sq)
             kernel_prob = prob * kernel
 
-            # Probabilistic union: P_total = 1 - (1 - P_field) * (1 - P_kernel)
+            # Smooth probabilistic union: P_total = 1 - (1 - P_field) * (1 - P_kernel)
             field = 1.0 - (1.0 - field) * (1.0 - np.clip(kernel_prob, 0.0, 0.999))
 
     # Convective Initiation plume injection for pre-convective 30-60 min forecasts
@@ -130,18 +181,21 @@ def extrapolate_lagrangian_advection(
     base_lead: int = 60,
     background_p: float = 0.05,
     tau_minutes: float = 45.0,
+    lifecycle_state: StormLifecycleState | str | None = None,
 ) -> np.ndarray:
-    """Extrapolate continuous probability field to outer horizons (60-120 min).
+    """Extrapolate continuous probability field to outer horizons (up to 90-120 min).
 
     Applies:
     1. Lagrangian displacement along storm motion vector [u, v].
-    2. Exponential predictability decay exp(-dt / tau) reflecting convective storm lifecycle.
+    2. Exponential predictability decay exp(-dt / tau) reflecting convective storm lifecycle
+       (tau = 45 min for initiating cells, 75 min for mature squall lines).
     3. Increasing spatial diffusion modeling positional uncertainty growth with lead time.
     """
     if lead_minutes <= base_lead:
         return p_grid_base
 
     dt = float(lead_minutes - base_lead)
+    effective_tau = get_lifecycle_tau_decay(lifecycle_state) if lifecycle_state is not None else tau_minutes
 
     # Pixel shift (v is y/lat direction, u is x/lon direction)
     # Scale: motion vector is given per 15-min interval
@@ -153,7 +207,7 @@ def extrapolate_lagrangian_advection(
     advected = ndi.shift(p_grid_base, shift=(shift_y, shift_x), order=1, mode="nearest", prefilter=False)
 
     # Exponential predictability dissipation
-    decay = math.exp(-dt / max(1.0, tau_minutes))
+    decay = math.exp(-dt / max(1.0, effective_tau))
     decayed = background_p + (advected - background_p) * decay
 
     # Progressive spatial diffusion: uncertainty expands with sqrt(dt)
@@ -218,6 +272,66 @@ def compute_spatial_uncertainty_field(
     # Gaussian smoothing to create seamless uncertainty field
     sigma = ndi.gaussian_filter(sigma, sigma=1.5, mode="nearest")
     return np.clip(sigma, 0.05, 1.0).astype(np.float32)
+
+
+@dataclass
+class ThreeTierUncertainty:
+    """Container for three-tier uncertainty decomposition (TASK-V2-6.1)."""
+    p_hazard: np.ndarray             # Tier 1: Calibrated hazard probability P in [0.0, 1.0]
+    sigma_aleatoric: np.ndarray      # Tier 2: Aleatoric spread sqrt(P*(1-P)*(1 + dt/60))
+    sensor_confidence: float         # Tier 3: Epistemic sensor health index [0.05, 0.90]
+    composite_sigma: np.ndarray      # Smoothed composite uncertainty field [0.05, 1.0]
+
+
+def compute_three_tier_uncertainty(
+    p_grid: np.ndarray,
+    lead_minutes: int,
+    grid: GridSpec,
+    missing_modalities: list[str] | None = None,
+    radar_available: bool = True,
+    qc_suspect_count: int = 0,
+) -> ThreeTierUncertainty:
+    """Three-Tier Uncertainty Quantification (TASK-V2-6.1).
+
+    Explicitly decomposes total forecast uncertainty into:
+    1. Hazard Probability P in [0.0, 1.0]: Physical likelihood of convection/lightning.
+    2. Aleatoric Spatial Spread: Predictive variance sigma^2_aleatoric = P*(1 - P)*(1 + dt / 60)
+       capturing intrinsic chaotic atmospheric unpredictability, maximized at decision boundary P=0.5.
+    3. Epistemic Sensor Confidence: Bounded [0.05, 0.90] reflecting sensor degradation,
+       missing feeds, and QC status.
+    """
+    p = np.clip(np.nan_to_num(p_grid.astype(np.float32), nan=0.05), 0.0, 1.0)
+
+    # Tier 2: Aleatoric spatial spread
+    dt = float(lead_minutes)
+    aleatoric_var = p * (1.0 - p) * (1.0 + dt / 60.0)
+    sigma_aleatoric = np.sqrt(aleatoric_var).astype(np.float32)
+
+    # Tier 3: Epistemic sensor confidence
+    missing = set(m.lower() for m in (missing_modalities or []))
+    n_total = 5
+    n_missing = len(missing)
+    if not radar_available and "radar" not in missing:
+        n_missing += 1
+    n_healthy = max(0, n_total - n_missing)
+    base_conf = 0.35 + 0.12 * max(0, n_healthy - 1)
+    sensor_conf = float(np.clip(base_conf - 0.05 * qc_suspect_count, 0.05, 0.90))
+
+    # Composite spatial uncertainty field for visualization & downstream consumers
+    composite = compute_spatial_uncertainty_field(
+        p_grid=p,
+        lead_minutes=lead_minutes,
+        grid=grid,
+        missing_modalities=missing_modalities,
+        radar_available=radar_available,
+    )
+
+    return ThreeTierUncertainty(
+        p_hazard=p,
+        sigma_aleatoric=sigma_aleatoric,
+        sensor_confidence=sensor_conf,
+        composite_sigma=composite,
+    )
 
 
 def render_uncertainty_png(sigma_grid: np.ndarray) -> bytes:

@@ -1,0 +1,40 @@
+{
+  "project": "Project Vajra (वज्र)",
+  "version": "1.0.0",
+  "baseline_lock_date": "2026-09-27T18:25:00+05:30",
+  "test_suite": {
+    "total_tests": 132,
+    "tests_passed": 132,
+    "pass_rate": 1.0,
+    "status": "PASS"
+  },
+  "burn_in_benchmark": {
+    "event_id": "bihar_squall_2026",
+    "cycles_completed": 72,
+    "mean_latency_ms": 100.9,
+    "p50_latency_ms": 95.2,
+    "p95_latency_ms": 175.7,
+    "p99_latency_ms": 179.3,
+    "max_latency_ms": 180.1,
+    "sla_latency_limit_ms": 1000.0,
+    "peak_memory_mb": 16.07,
+    "net_memory_growth_mb": 1.67,
+    "memory_growth_limit_mb": 50.0,
+    "status": "PASS"
+  },
+  "scientific_verification_baseline": {
+    "benchmark_event": "sevir_s810646",
+    "benchmark_regime": "Held-Out SEVIR Tornadic Squall Line (Veillette et al. 2020)",
+    "brier_skill_score_vs_climatology": 0.498,
+    "brier_score": 0.124,
+    "pod_hit_rate": 0.85,
+    "far_false_alarm": 0.18,
+    "csi_threat_score": 0.72,
+    "status": "PASS"
+  },
+  "operational_readiness": {
+    "mission_mausam_compliant": true,
+    "dual_track_resilience": true,
+    "cap_1_2_sachet_verified": true
+  }
+}

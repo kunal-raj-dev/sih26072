@@ -86,3 +86,33 @@ mosdac:
   password: ""
   host: "www.mosdac.gov.in"
 
+v2_models:
+  backbone: "attention_unet"
+  patch_size: 192
+  alpha_focal: 0.25
+  gamma_focal: 2.0
+  lambda_dice: 0.5
+
+mosaic:
+  station_weights:
+    patna: 1.0
+    kolkata: 1.0
+    ranchi: 1.0
+    delhi: 1.0
+  max_range_km: 250.0
+  cressman_radius_km: 10.0
+
+ci:
+  cooling_rate_threshold_k_per_15m: -4.0
+  freezing_level_k: 273.15
+  split_window_diff_k: -1.0
+  min_area_km2: 15.0
+
+impact:
+  vulnerability_weight: 1.0
+  population_exposure_threshold: 50000
+  rural_labor_multiplier: 1.5
+  rural_labor_start_hour: 11
+  rural_labor_end_hour: 17
+  rural_labor_gating: true
+

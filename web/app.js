@@ -377,6 +377,8 @@ function getPlaybackInterval() {
   return Math.max(150, Math.round(900 / spd));
 }
 
+state.loop = true;
+
 function startPlayback() {
   clearInterval(state.timer);
   state.playing = true;
@@ -384,7 +386,12 @@ function startPlayback() {
   state.timer = setInterval(() => {
     if (!state.forecasts.length) return;
     if (state.index >= state.forecasts.length - 1) {
-      state.index = 0; // loop playback
+      if (state.loop !== false) {
+        state.index = 0; // loop playback
+      } else {
+        stopPlayback();
+        return;
+      }
     } else {
       state.index++;
     }
@@ -404,6 +411,14 @@ $("play-btn").onclick = () => {
   else startPlayback();
 };
 
+if ($("loop-btn")) {
+  $("loop-btn").onclick = () => {
+    state.loop = !state.loop;
+    $("loop-btn").classList.toggle("active", state.loop);
+    showToast(state.loop ? "Timeline looping enabled" : "Timeline looping disabled");
+  };
+}
+
 if ($("speed-select")) {
   $("speed-select").onchange = () => {
     state.speed = parseFloat($("speed-select").value) || 1;
@@ -412,6 +427,7 @@ if ($("speed-select")) {
 }
 
 $("lead-select").onchange = () => { state.lead = +$("lead-select").value; renderStep(); };
+
 
 function stepBy(d) {
   if (!state.forecasts.length) return;
@@ -625,8 +641,34 @@ async function renderAlerts(f) {
     return Math.abs(issued - t) < 30 * 60000; // alerts relevant near this cycle
   });
   state.activeAlerts = active;
+
+  // Update DDMA Overview Card (TASK-V2-9.1)
+  const ddmaStats = $("ddma-impact-stats");
+  if (ddmaStats) {
+    if (!active.length) {
+      ddmaStats.innerHTML = `<span style="color:#22c55e;">🟢 All administrative blocks clear. No active convective warning.</span>`;
+    } else {
+      const totalPop = active.reduce((sum, a) => sum + (a.population_exposed || 0), 0);
+      const maxStage = active.some((a) => a.imd_stage === "RED") ? "RED" :
+                       (active.some((a) => a.imd_stage === "ORANGE") ? "ORANGE" : "YELLOW");
+      const clr = maxStage === "RED" ? "#ef4444" : (maxStage === "ORANGE" ? "#f97316" : "#eab308");
+      const dists = Array.from(new Set(active.flatMap((a) => a.affected_districts || [])));
+      const blks = Array.from(new Set(active.flatMap((a) => a.affected_blocks || [])));
+      ddmaStats.innerHTML = `
+        <div style="margin-bottom:4px;"><span style="background:${clr};color:#fff;padding:2px 6px;border-radius:3px;font-weight:800;font-size:10px;">IMD ${maxStage} ACTIVE</span> · Active Alerts: <strong>${active.length}</strong></div>
+        <div style="margin-bottom:2px;">Exposed Population: <strong style="color:#fff;">${totalPop.toLocaleString()}</strong></div>
+        <div style="margin-bottom:2px;">Target Districts: <strong>${dists.join(", ") || "—"}</strong></div>
+        <div class="small muted">Target Blocks: ${blks.slice(0, 4).join(", ")}${blks.length > 4 ? ` (+${blks.length - 4} more)` : ""}</div>
+      `;
+      if (state.persona === "ddma") {
+        playAlertChime(maxStage);
+      }
+    }
+  }
+
   const list = $("alerts-list");
   if (!active.length) { list.innerHTML = '<div class="muted">no alerts in this window</div>'; return; }
+
   list.innerHTML = active.slice(-6).reverse().map((a) => {
     const popBadge = a.population_exposed ? `<span class="badge" style="background:#0284c7;color:#fff;margin-left:6px;font-size:10px;padding:2px 6px;border-radius:4px;">👥 ${Number(a.population_exposed).toLocaleString()} exposed</span>` : "";
     const locHead = a.region_name ? `<div style="font-weight:600;color:#38bdf8;margin:3px 0;">📍 ${a.region_name}</div>` : "";
@@ -1245,6 +1287,94 @@ function cellPopup(e) {
 map.on("sourcedata", () => { /* no-op: popups attach to fill layer */ });
 
 // ---------- data health ----------
+// ---------- Dual-Persona Operational Toggle (TASK-V2-9.1) ----------
+function playAlertChime(stage) {
+  if (!$("chk-audio-chime") || !$("chk-audio-chime").checked) return;
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    const freq = stage === "RED" ? 880 : (stage === "ORANGE" ? 660 : 440);
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.45);
+  } catch (e) {
+    // AudioContext may be restricted before user interaction
+  }
+}
+
+function setPersona(persona) {
+  state.persona = persona;
+  try {
+    localStorage.setItem("vajra_ui_persona", persona);
+  } catch (e) {}
+
+  if (persona === "ddma") {
+    document.body.classList.add("persona-ddma");
+    document.body.classList.remove("persona-imd");
+    if ($("persona-ddma")) $("persona-ddma").classList.add("active");
+    if ($("persona-imd")) $("persona-imd").classList.remove("active");
+    document.querySelectorAll(".persona-ddma-only").forEach((el) => (el.style.display = "block"));
+    document.querySelectorAll(".persona-imd-only").forEach((el) => (el.style.display = "none"));
+    if ($("lyr-admin")) $("lyr-admin").checked = true;
+    if (map.getLayer("admin-blocks-line")) map.setLayoutProperty("admin-blocks-line", "visibility", "visible");
+    if (map.getLayer("admin-districts-line")) map.setLayoutProperty("admin-districts-line", "visibility", "visible");
+    showToast("🛡️ Switched to DDMA Disaster Management Mode");
+  } else {
+    document.body.classList.add("persona-imd");
+    document.body.classList.remove("persona-ddma");
+    if ($("persona-imd")) $("persona-imd").classList.add("active");
+    if ($("persona-ddma")) $("persona-ddma").classList.remove("active");
+    document.querySelectorAll(".persona-imd-only").forEach((el) => (el.style.display = ""));
+    document.querySelectorAll(".persona-ddma-only").forEach((el) => (el.style.display = "none"));
+    showToast("🔬 Switched to IMD Duty Forecaster Mode");
+  }
+}
+
+if ($("persona-imd")) $("persona-imd").onclick = () => setPersona("imd");
+if ($("persona-ddma")) $("persona-ddma").onclick = () => setPersona("ddma");
+
+// One-Click CAP 1.2 Dispatch (DDMA Mode)
+if ($("btn-dispatch-cap")) {
+  $("btn-dispatch-cap").onclick = () => {
+    if (!state.activeAlerts || state.activeAlerts.length === 0) {
+      showToast("No active alerts to broadcast.");
+      return;
+    }
+    const topAlert = state.activeAlerts[0];
+    showToast(`🚨 CAP 1.2 Broadcast Dispatched to SACHET / DEOC: ${topAlert.id}`);
+    playAlertChime(topAlert.imd_stage);
+  };
+}
+
+// Split-Screen Verification Slider (TASK-V2-9.3)
+if ($("compare-slider")) {
+  $("compare-slider").oninput = (e) => {
+    const val = parseFloat(e.target.value);
+    const maxProb = parseFloat($("lyr-prob-opacity") ? $("lyr-prob-opacity").value : 92) / 100.0;
+    const probOp = (val / 100.0) * maxProb;
+    const obsOp = ((100.0 - val) / 100.0) * 0.85;
+    if ($("compare-val")) {
+      $("compare-val").textContent = `${val.toFixed(0)}% Nowcast / ${(100 - val).toFixed(0)}% Obs`;
+    }
+    if (map.getLayer("prob-layer")) {
+      map.setPaintProperty("prob-layer", "raster-opacity", probOp);
+    }
+    if (map.getLayer("obs-layer")) {
+      map.setPaintProperty("obs-layer", "raster-opacity", obsOp);
+    }
+  };
+}
+
+// ---------- data health ----------
 async function loadHealth() {
   try {
     const items = await api("/data-health");
@@ -1259,6 +1389,8 @@ setInterval(loadHealth, 60000);
 // ---------- boot ----------
 (async function boot() {
   try {
+    const savedPersona = localStorage.getItem("vajra_ui_persona") || "imd";
+    setPersona(savedPersona);
     await loadEvents();
     // Auto-run the first synthetic event so the page is never empty.
     const sim = state.events.find((e) => e.mode === "SIMULATION");
@@ -1280,3 +1412,4 @@ setInterval(loadHealth, 60000);
     $("run-status").textContent = `API unreachable: ${e.message}`;
   }
 })();
+

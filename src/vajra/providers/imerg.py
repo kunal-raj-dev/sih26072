@@ -24,7 +24,7 @@ import httpx
 import numpy as np
 
 from ..config import Settings
-from ..grid import GridSpec
+from ..grid import GridSpec, make_india_grid
 from ..schemas import (
     DataHealth,
     DataMode,
@@ -223,3 +223,101 @@ class ImergProvider(AtmosphericDataProvider):
             self._last_error = f"{type(exc).__name__}: {exc}"
             log_event(logger, 30, "imerg fetch failed", error=self._last_error)
         return frames
+
+
+def make_imerg_highres_grid(
+    lat_min: float = 6.0,
+    lat_max: float = 38.0,
+    lon_min: float = 66.0,
+    lon_max: float = 98.0,
+    step_deg: float = 0.02,
+) -> GridSpec:
+    """Create a 0.02° high-resolution Cartesian GridSpec covering the Indian domain."""
+    nlat = int(round((lat_max - lat_min) / step_deg))
+    nlon = int(round((lon_max - lon_min) / step_deg))
+    return GridSpec(
+        name="india_0p02",
+        lat0=lat_min,
+        lon0=lon_min,
+        dlat=step_deg,
+        dlon=step_deg,
+        nlat=nlat,
+        nlon=nlon,
+        geolocation="exact",
+    )
+
+
+def regrid_imerg(
+    field: np.ndarray,
+    src_grid: GridSpec,
+    target_grid: GridSpec,
+) -> np.ndarray:
+    """Bilinear / nearest regridding of an IMERG rainfall field onto any target GridSpec (e.g. 0.1° or 0.02°)."""
+    if field.shape == (target_grid.nlat, target_grid.nlon) and src_grid == target_grid:
+        return field.astype(np.float32)
+
+    target_lats = target_grid.lats
+    target_lons = target_grid.lons
+
+    lat_frac = (target_lats[:, None] - src_grid.lat0) / max(src_grid.dlat, 1e-6)
+    lon_frac = (target_lons[None, :] - src_grid.lon0) / max(src_grid.dlon, 1e-6)
+
+    i0 = np.clip(np.floor(lat_frac).astype(int), 0, src_grid.nlat - 2)
+    j0 = np.clip(np.floor(lon_frac).astype(int), 0, src_grid.nlon - 2)
+    i1 = i0 + 1
+    j1 = j0 + 1
+
+    di = np.clip(lat_frac - i0, 0.0, 1.0)
+    dj = np.clip(lon_frac - j0, 0.0, 1.0)
+
+    top = (1.0 - dj) * field[i0, j0] + dj * field[i0, j1]
+    bot = (1.0 - dj) * field[i1, j0] + dj * field[i1, j1]
+    regridded = (1.0 - di) * top + di * bot
+
+    # Clamp bounds outside source domain to 0
+    min_lat, max_lat = src_grid.lat_edges
+    min_lon, max_lon = src_grid.lon_edges
+    in_lat = (target_lats[:, None] >= min_lat) & (target_lats[:, None] <= max_lat)
+    in_lon = (target_lons[None, :] >= min_lon) & (target_lons[None, :] <= max_lon)
+    in_bounds = in_lat & in_lon
+    regridded = np.where(in_bounds, regridded, 0.0)
+
+    return np.clip(regridded, 0.0, 500.0).astype(np.float32)
+
+
+def parse_imerg_hdf5(
+    path: Path,
+    target_grid: GridSpec | None = None,
+) -> tuple[ObsFrame, np.ndarray, GridSpec]:
+    """Parse an IMERG HDF5 file and return calibrated ObsFrame and regridded array."""
+    raw_win, raw_grid, slot = ImergProvider._parse_india(path)
+    grid = target_grid or raw_grid
+    if grid != raw_grid:
+        data = regrid_imerg(raw_win, raw_grid, grid)
+    else:
+        data = raw_win
+
+    gm = GridMeta(
+        name=grid.name,
+        lat0=grid.lat0,
+        lon0=grid.lon0,
+        dlat=grid.dlat,
+        dlon=grid.dlon,
+        nlat=grid.nlat,
+        nlon=grid.nlon,
+        geolocation="exact",
+    )
+    meta = ObsFrameMeta(
+        source="imerg_earthdata",
+        modality=Modality.SURFACE,
+        variable="precipitation",
+        units="mm/hr",
+        time=slot,
+        grid=gm,
+        mode=DataMode.LIVE,
+        quality=QualityInfo(status=QualityStatus.OK),
+        note=f"IMERG V07 Early regridded to {grid.name} ({data.shape[0]}x{data.shape[1]})",
+    )
+    frame = ObsFrame(meta, field=data)
+    return frame, data, grid
+

@@ -48,8 +48,44 @@ def _format_polygon(bbox: list[float]) -> str:
     return " ".join(f"{round(lat, 5)},{round(lon, 5)}" for lat, lon in coords)
 
 
+def get_hindi_directives(severity: str) -> str:
+    """Return actionable Hindi directive conforming to NDMA / SACHET standards."""
+    if severity == "WARNING":
+        return (
+            "तत्काल पक्के आश्रय में जाएं, पेड़ों के नीचे न खड़े हों। खुले खेतों, जल स्रोतों "
+            "और धातु की बाड़ों से तुरंत दूर रहें। सभी कृषि व बाहरी कार्य तत्काल रोक दें।"
+        )
+    elif severity == "WATCH":
+        return (
+            "सुरक्षित पक्के भवनों के निकट रहें और सतर्क रहें। बच्चों एवं पशुओं को खुले "
+            "स्थानों से तुरंत सुरक्षित स्थान पर ले जाएं। पेड़ों के नीचे शरण न लें।"
+        )
+    return (
+        "मौसम की स्थिति पर नजर रखें। आंधी या बिजली चमकने पर खुले मैदानों में न रहें "
+        "और निकटतम सुरक्षित आश्रय की पहचान रखें।"
+    )
+
+
+def get_hindi_headline(alert: Alert) -> str:
+    """Return official bilingual Hindi headline for CAP 1.2 alert."""
+    if alert.severity == "WARNING":
+        return f"[आईएमडी {alert.imd_stage} {alert.severity}] {alert.region_name} में {alert.lead_minutes} मिनट के भीतर आकाशीय बिजली / वज्रपात की तीव्र चेतावनी"
+    elif alert.severity == "WATCH":
+        return f"[आईएमडी {alert.imd_stage} {alert.severity}] {alert.region_name} में {alert.lead_minutes} मिनट के भीतर बिजली गिरने की प्रबल संभावना"
+    return f"[आईएमडी {alert.imd_stage} {alert.severity}] {alert.region_name} के लिए वज्रपात चेतावनी"
+
+
+def get_hindi_description(alert: Alert) -> str:
+    """Return official bilingual Hindi description for CAP 1.2 alert."""
+    jump_str = " (अत्यधिक तीव्र 2-सिग्मा बिजली दर वृद्धि दर्ज)" if "JUMP" in alert.headline or "jump" in alert.reason.lower() else ""
+    return (
+        f"आगामी {alert.lead_minutes} मिनट में वज्रपात की संभावना {alert.probability:.0%} है। "
+        f"प्रभावित क्षेत्र: {alert.region_name}। संभावित प्रभावित जनसंख्या: {alert.population_exposed}।{jump_str}"
+    )
+
+
 def build_cap_12_xml(alert: Alert) -> str:
-    """Generate an official OASIS CAP 1.2 XML document for an Alert."""
+    """Generate an official OASIS CAP 1.2 XML document for an Alert with bilingual info blocks (en-IN, hi-IN)."""
     root = ET.Element("alert", xmlns=CAP_NAMESPACE)
 
     # Required top-level header elements
@@ -68,45 +104,10 @@ def build_cap_12_xml(alert: Alert) -> str:
 
     # References if this is an update
     if alert.is_update and alert.supersedes_id:
-        # CAP 1.2 format: sender,identifier,sent
         ref_sent = _format_iso(alert.valid_from)
         ET.SubElement(root, "references").text = f"{SENDER_ID},{alert.supersedes_id},{ref_sent}"
 
-    # <info> block
-    info = ET.SubElement(root, "info")
-    ET.SubElement(info, "language").text = "en-IN"
-    ET.SubElement(info, "category").text = "Met"
-    ET.SubElement(info, "event").text = f"{alert.hazard.capitalize()} Hazard Nowcast"
-
-    # ResponseType
     resp_type = "Shelter" if alert.severity == "WARNING" else ("Prepare" if alert.severity == "WATCH" else "Monitor")
-    ET.SubElement(info, "responseType").text = resp_type
-
-    ET.SubElement(info, "urgency").text = alert.urgency
-    ET.SubElement(info, "severity").text = alert.cap_severity
-    ET.SubElement(info, "certainty").text = alert.certainty
-
-    # IMD 4-Stage Warning Color Code
-    event_code = ET.SubElement(info, "eventCode")
-    ET.SubElement(event_code, "valueName").text = "IMD_COLOR_CODE"
-    ET.SubElement(event_code, "value").text = alert.imd_stage
-
-    ET.SubElement(info, "effective").text = _format_iso(alert.valid_from)
-    ET.SubElement(info, "onset").text = _format_iso(alert.valid_from)
-    ET.SubElement(info, "expires").text = _format_iso(alert.valid_until)
-    ET.SubElement(info, "senderName").text = SENDER_NAME
-
-    # Headline & Description
-    headline_text = (
-        alert.headline
-        or f"[IMD {alert.imd_stage} {alert.severity}] Lightning hazard expected in {alert.region_name} within {alert.lead_minutes} min (P={alert.probability:.2f})"
-    )
-    ET.SubElement(info, "headline").text = headline_text
-    ET.SubElement(info, "description").text = alert.reason
-    ET.SubElement(info, "instruction").text = alert.recommended_action
-    ET.SubElement(info, "web").text = f"https://vajra.nowcast.imd.gov.in/alerts/{alert.id}"
-
-    # Parameters
     params = [
         ("P_FLASH", f"{alert.probability:.3f}"),
         ("LEAD_MINUTES", str(alert.lead_minutes)),
@@ -116,28 +117,100 @@ def build_cap_12_xml(alert: Alert) -> str:
         ("DATA_MODE", alert.mode.value),
         ("POPULATION_EXPOSED", str(alert.population_exposed)),
     ]
+
+    # --- 1. Primary English <info> block (en-IN) ---
+    info_en = ET.SubElement(root, "info")
+    ET.SubElement(info_en, "language").text = "en-IN"
+    ET.SubElement(info_en, "category").text = "Met"
+    ET.SubElement(info_en, "event").text = f"{alert.hazard.capitalize()} Hazard Nowcast"
+    ET.SubElement(info_en, "responseType").text = resp_type
+    ET.SubElement(info_en, "urgency").text = alert.urgency
+    ET.SubElement(info_en, "severity").text = alert.cap_severity
+    ET.SubElement(info_en, "certainty").text = alert.certainty
+
+    event_code_en = ET.SubElement(info_en, "eventCode")
+    ET.SubElement(event_code_en, "valueName").text = "IMD_COLOR_CODE"
+    ET.SubElement(event_code_en, "value").text = alert.imd_stage
+
+    ET.SubElement(info_en, "effective").text = _format_iso(alert.valid_from)
+    ET.SubElement(info_en, "onset").text = _format_iso(alert.valid_from)
+    ET.SubElement(info_en, "expires").text = _format_iso(alert.valid_until)
+    ET.SubElement(info_en, "senderName").text = SENDER_NAME
+
+    headline_en = (
+        alert.headline
+        or f"[IMD {alert.imd_stage} {alert.severity}] Lightning hazard expected in {alert.region_name} within {alert.lead_minutes} min (P={alert.probability:.2f})"
+    )
+    ET.SubElement(info_en, "headline").text = headline_en
+    ET.SubElement(info_en, "description").text = alert.reason
+    ET.SubElement(info_en, "instruction").text = alert.recommended_action
+    ET.SubElement(info_en, "web").text = f"https://vajra.nowcast.imd.gov.in/alerts/{alert.id}"
+
     for p_name, p_val in params:
-        param_elem = ET.SubElement(info, "parameter")
+        param_elem = ET.SubElement(info_en, "parameter")
         ET.SubElement(param_elem, "valueName").text = p_name
         ET.SubElement(param_elem, "value").text = p_val
 
     for sig_name, sig_val in alert.contributing_signals.items():
-        param_elem = ET.SubElement(info, "parameter")
+        param_elem = ET.SubElement(info_en, "parameter")
         ET.SubElement(param_elem, "valueName").text = f"SIGNAL_{sig_name.upper()}"
         ET.SubElement(param_elem, "value").text = str(sig_val)
 
-    # <area> block
-    area = ET.SubElement(info, "area")
-    ET.SubElement(area, "areaDesc").text = alert.region_name
-    ET.SubElement(area, "polygon").text = _format_polygon(alert.bbox)
-
+    area_en = ET.SubElement(info_en, "area")
+    ET.SubElement(area_en, "areaDesc").text = alert.region_name
+    ET.SubElement(area_en, "polygon").text = _format_polygon(alert.bbox)
     for dist in alert.affected_districts:
-        gc = ET.SubElement(area, "geocode")
+        gc = ET.SubElement(area_en, "geocode")
         ET.SubElement(gc, "valueName").text = "DISTRICT"
         ET.SubElement(gc, "value").text = dist
-
     for blk in alert.affected_blocks:
-        gc = ET.SubElement(area, "geocode")
+        gc = ET.SubElement(area_en, "geocode")
+        ET.SubElement(gc, "valueName").text = "BLOCK"
+        ET.SubElement(gc, "value").text = blk
+
+    # --- 2. Bilingual Hindi <info> block (hi-IN) for SACHET / NDMA compliance ---
+    info_hi = ET.SubElement(root, "info")
+    ET.SubElement(info_hi, "language").text = "hi-IN"
+    ET.SubElement(info_hi, "category").text = "Met"
+    ET.SubElement(info_hi, "event").text = "वज्रपात चेतावनी"
+    ET.SubElement(info_hi, "responseType").text = resp_type
+    ET.SubElement(info_hi, "urgency").text = alert.urgency
+    ET.SubElement(info_hi, "severity").text = alert.cap_severity
+    ET.SubElement(info_hi, "certainty").text = alert.certainty
+
+    event_code_hi = ET.SubElement(info_hi, "eventCode")
+    ET.SubElement(event_code_hi, "valueName").text = "IMD_COLOR_CODE"
+    ET.SubElement(event_code_hi, "value").text = alert.imd_stage
+
+    ET.SubElement(info_hi, "effective").text = _format_iso(alert.valid_from)
+    ET.SubElement(info_hi, "onset").text = _format_iso(alert.valid_from)
+    ET.SubElement(info_hi, "expires").text = _format_iso(alert.valid_until)
+    ET.SubElement(info_hi, "senderName").text = "परियोजना वज्र (पृथ्वी विज्ञान मंत्रालय / भारत मौसम विज्ञान विभाग)"
+
+    ET.SubElement(info_hi, "headline").text = get_hindi_headline(alert)
+    ET.SubElement(info_hi, "description").text = get_hindi_description(alert)
+    ET.SubElement(info_hi, "instruction").text = get_hindi_directives(alert.severity)
+    ET.SubElement(info_hi, "web").text = f"https://vajra.nowcast.imd.gov.in/alerts/{alert.id}"
+
+    for p_name, p_val in params:
+        param_elem = ET.SubElement(info_hi, "parameter")
+        ET.SubElement(param_elem, "valueName").text = p_name
+        ET.SubElement(param_elem, "value").text = p_val
+
+    for sig_name, sig_val in alert.contributing_signals.items():
+        param_elem = ET.SubElement(info_hi, "parameter")
+        ET.SubElement(param_elem, "valueName").text = f"SIGNAL_{sig_name.upper()}"
+        ET.SubElement(param_elem, "value").text = str(sig_val)
+
+    area_hi = ET.SubElement(info_hi, "area")
+    ET.SubElement(area_hi, "areaDesc").text = alert.region_name
+    ET.SubElement(area_hi, "polygon").text = _format_polygon(alert.bbox)
+    for dist in alert.affected_districts:
+        gc = ET.SubElement(area_hi, "geocode")
+        ET.SubElement(gc, "valueName").text = "DISTRICT"
+        ET.SubElement(gc, "value").text = dist
+    for blk in alert.affected_blocks:
+        gc = ET.SubElement(area_hi, "geocode")
         ET.SubElement(gc, "valueName").text = "BLOCK"
         ET.SubElement(gc, "value").text = blk
 
@@ -148,7 +221,7 @@ def build_cap_12_xml(alert: Alert) -> str:
 
 
 def build_cap_12_json(alert: Alert) -> dict[str, Any]:
-    """Generate an official OASIS/WMO compliant CAP 1.2 JSON object for an Alert."""
+    """Generate an official OASIS/WMO compliant CAP 1.2 JSON object for an Alert with bilingual info."""
     status_val = "Actual" if alert.mode == DataMode.LIVE else "Test"
     msg_type = "Update" if alert.is_update else "Alert"
     resp_type = "Shelter" if alert.severity == "WARNING" else ("Prepare" if alert.severity == "WATCH" else "Monitor")
@@ -157,6 +230,69 @@ def build_cap_12_json(alert: Alert) -> dict[str, Any]:
         or f"[IMD {alert.imd_stage} {alert.severity}] Lightning hazard expected in {alert.region_name} within {alert.lead_minutes} min (P={alert.probability:.2f})"
     )
 
+    common_params = [
+        {"valueName": "P_FLASH", "value": f"{alert.probability:.3f}"},
+        {"valueName": "LEAD_MINUTES", "value": str(alert.lead_minutes)},
+        {"valueName": "PRESET", "value": alert.preset},
+        {"valueName": "CONFIDENCE", "value": f"{alert.confidence:.2f}"},
+        {"valueName": "MODEL_VERSION", "value": alert.model_version},
+        {"valueName": "DATA_MODE", "value": alert.mode.value},
+        {"valueName": "POPULATION_EXPOSED", "value": str(alert.population_exposed)},
+    ]
+
+    common_area = [
+        {
+            "areaDesc": alert.region_name,
+            "polygon": [_format_polygon(alert.bbox)],
+            "geocode": [
+                *[{"valueName": "DISTRICT", "value": d} for d in alert.affected_districts],
+                *[{"valueName": "BLOCK", "value": b} for b in alert.affected_blocks],
+            ],
+        }
+    ]
+
+    info_en = {
+        "language": "en-IN",
+        "category": ["Met"],
+        "event": f"{alert.hazard.capitalize()} Hazard Nowcast",
+        "responseType": [resp_type],
+        "urgency": alert.urgency,
+        "severity": alert.cap_severity,
+        "certainty": alert.certainty,
+        "eventCode": [{"valueName": "IMD_COLOR_CODE", "value": alert.imd_stage}],
+        "effective": _format_iso(alert.valid_from),
+        "onset": _format_iso(alert.valid_from),
+        "expires": _format_iso(alert.valid_until),
+        "senderName": SENDER_NAME,
+        "headline": headline_text,
+        "description": alert.reason,
+        "instruction": alert.recommended_action,
+        "web": f"https://vajra.nowcast.imd.gov.in/alerts/{alert.id}",
+        "parameter": common_params,
+        "area": common_area,
+    }
+
+    info_hi = {
+        "language": "hi-IN",
+        "category": ["Met"],
+        "event": "वज्रपात चेतावनी",
+        "responseType": [resp_type],
+        "urgency": alert.urgency,
+        "severity": alert.cap_severity,
+        "certainty": alert.certainty,
+        "eventCode": [{"valueName": "IMD_COLOR_CODE", "value": alert.imd_stage}],
+        "effective": _format_iso(alert.valid_from),
+        "onset": _format_iso(alert.valid_from),
+        "expires": _format_iso(alert.valid_until),
+        "senderName": "परियोजना वज्र (पृथ्वी विज्ञान मंत्रालय / भारत मौसम विज्ञान विभाग)",
+        "headline": get_hindi_headline(alert),
+        "description": get_hindi_description(alert),
+        "instruction": get_hindi_directives(alert.severity),
+        "web": f"https://vajra.nowcast.imd.gov.in/alerts/{alert.id}",
+        "parameter": common_params,
+        "area": common_area,
+    }
+
     cap_json: dict[str, Any] = {
         "identifier": alert.id,
         "sender": SENDER_ID,
@@ -164,45 +300,7 @@ def build_cap_12_json(alert: Alert) -> dict[str, Any]:
         "status": status_val,
         "msgType": msg_type,
         "scope": "Public",
-        "info": [
-            {
-                "language": "en-IN",
-                "category": ["Met"],
-                "event": f"{alert.hazard.capitalize()} Hazard Nowcast",
-                "responseType": [resp_type],
-                "urgency": alert.urgency,
-                "severity": alert.cap_severity,
-                "certainty": alert.certainty,
-                "eventCode": [{"valueName": "IMD_COLOR_CODE", "value": alert.imd_stage}],
-                "effective": _format_iso(alert.valid_from),
-                "onset": _format_iso(alert.valid_from),
-                "expires": _format_iso(alert.valid_until),
-                "senderName": SENDER_NAME,
-                "headline": headline_text,
-                "description": alert.reason,
-                "instruction": alert.recommended_action,
-                "web": f"https://vajra.nowcast.imd.gov.in/alerts/{alert.id}",
-                "parameter": [
-                    {"valueName": "P_FLASH", "value": f"{alert.probability:.3f}"},
-                    {"valueName": "LEAD_MINUTES", "value": str(alert.lead_minutes)},
-                    {"valueName": "PRESET", "value": alert.preset},
-                    {"valueName": "CONFIDENCE", "value": f"{alert.confidence:.2f}"},
-                    {"valueName": "MODEL_VERSION", "value": alert.model_version},
-                    {"valueName": "DATA_MODE", "value": alert.mode.value},
-                    {"valueName": "POPULATION_EXPOSED", "value": str(alert.population_exposed)},
-                ],
-                "area": [
-                    {
-                        "areaDesc": alert.region_name,
-                        "polygon": [_format_polygon(alert.bbox)],
-                        "geocode": [
-                            *[{"valueName": "DISTRICT", "value": d} for d in alert.affected_districts],
-                            *[{"valueName": "BLOCK", "value": b} for b in alert.affected_blocks],
-                        ],
-                    }
-                ],
-            }
-        ],
+        "info": [info_en, info_hi],
     }
 
     if alert.is_update and alert.supersedes_id:

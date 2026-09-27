@@ -17,6 +17,10 @@
       <div class="subtitle">Thunderstorm &amp; Lightning Nowcasting · SIH 2026 PS 26072 (MoES/IMD)</div>
     </div>
   </div>
+  <div class="persona-switcher" role="group" aria-label="Operational Persona Mode">
+    <button id="persona-imd" class="persona-btn active" title="Switch to IMD Duty Forecaster Mode">🔬 IMD Forecaster</button>
+    <button id="persona-ddma" class="persona-btn" title="Switch to DDMA Disaster Management Mode">🛡️ DDMA Portal</button>
+  </div>
   <div class="badges">
     <span id="mode-badge" class="badge badge-mode" title="Data mode of the displayed forecast">—</span>
     <span id="rung-badge" class="badge" title="Active model rung (fallback ladder)">—</span>
@@ -40,6 +44,7 @@
         <button id="prev-btn" title="Previous cycle (Left Arrow)">◀</button>
         <button id="play-btn" title="Play/Pause (Space)" class="primary">▶</button>
         <button id="next-btn" title="Next cycle (Right Arrow)">▶</button>
+        <button id="loop-btn" class="active" title="Toggle Loop Playback">🔁</button>
         <button id="t0-btn" title="Jump to current T0 issue cycle (End)">● T0</button>
         <select id="speed-select" title="Playback speed">
           <option value="1">1x</option>
@@ -79,6 +84,15 @@
         <label for="lyr-prob-opacity">Probability opacity: <span id="prob-opacity-val">92%</span></label>
         <input type="range" id="lyr-prob-opacity" min="15" max="100" value="92" />
       </div>
+
+      <!-- Split-Screen Verification Slider (TASK-V2-9.3) -->
+      <div class="split-slider-container">
+        <label for="compare-slider">↔️ Split-Screen Verification (Nowcast vs Obs): <span id="compare-val">50/50</span></label>
+        <div class="split-slider-row">
+          <input type="range" id="compare-slider" min="0" max="100" value="50" aria-label="Split-screen compare slider" />
+        </div>
+      </div>
+
       <label class="chk"><input type="checkbox" id="lyr-obs" checked /> Observation field (VIL / IR)</label>
       <label class="chk"><input type="checkbox" id="lyr-cells" checked /> Storm cells (centroid / core)</label>
       <label class="chk"><input type="checkbox" id="lyr-cones" checked /> Projected tracks &amp; cones (60 min)</label>
@@ -97,14 +111,17 @@
           <option value="Bhagalpur">Bhagalpur</option>
           <option value="Darbhanga">Darbhanga</option>
           <option value="Rohtas">Rohtas</option>
+          <option value="Ranchi">Ranchi</option>
+          <option value="East Singhbhum">East Singhbhum (Jamshedpur)</option>
+          <option value="Dhanbad">Dhanbad</option>
         </select>
       </div>
-      <label class="chk" style="margin-top:8px;"><input type="checkbox" id="lyr-radar-rings" checked /> Radar range rings (100 / 250 km)</label>
-      <label class="chk"><input type="checkbox" id="lyr-radar-mosaic" /> Multi-Radar Composite (dBZ)</label>
-      <label class="chk"><input type="checkbox" id="lyr-ci" checked /> Convective Initiation (precursor)</label>
-      <label class="chk"><input type="checkbox" id="lyr-uncertainty" /> Forecast Uncertainty field</label>
-      <label class="chk"><input type="checkbox" id="lyr-live" /> IMD radar (LIVE, visual only)</label>
-      <div class="station-row">
+      <label class="chk persona-imd-only" style="margin-top:8px;"><input type="checkbox" id="lyr-radar-rings" checked /> Radar range rings (100 / 250 km)</label>
+      <label class="chk persona-imd-only"><input type="checkbox" id="lyr-radar-mosaic" /> Multi-Radar Composite (dBZ)</label>
+      <label class="chk persona-imd-only"><input type="checkbox" id="lyr-ci" checked /> Convective Initiation (precursor)</label>
+      <label class="chk persona-imd-only"><input type="checkbox" id="lyr-uncertainty" /> Forecast Uncertainty field</label>
+      <label class="chk persona-imd-only"><input type="checkbox" id="lyr-live" /> IMD radar (LIVE, visual only)</label>
+      <div class="station-row persona-imd-only">
         <select id="station-select" aria-label="IMD radar station">
           <option value="delhi">Delhi</option><option value="patna">Patna</option>
           <option value="kolkata">Kolkata</option><option value="lucknow">Lucknow</option>
@@ -112,7 +129,7 @@
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel persona-imd-only">
       <h2>Verification <span class="muted small">(this run, vs actual)</span></h2>
       <table id="verif-table" class="verif">
         <thead><tr><th>Lead</th><th>n</th><th>POD</th><th>FAR</th><th>CSI</th><th>BSS</th></tr></thead>
@@ -137,6 +154,17 @@
         <button id="btn-cycle-bulletin" class="small-btn danger" title="Generate official printable IMD/NDMA Emergency Bulletin">📄 Bulletin</button>
         <a href="/api/v1/alerts/feed.atom" target="_blank" style="margin-left:2px;font-size:11px;color:#38bdf8;text-decoration:none;padding:2px 6px;border:1px solid #0284c7;border-radius:4px;">📡 Feed</a>
       </div>
+
+      <!-- DDMA Specific Actions & Overview (TASK-V2-9.1) -->
+      <div id="ddma-actions" class="ddma-actions persona-ddma-only" style="display:none;margin-bottom:8px;">
+        <button id="btn-dispatch-cap" class="small-btn danger" style="width:100%;font-weight:700;margin-bottom:4px;">🚨 1-Click Broadcast CAP 1.2 to SACHET</button>
+        <label class="chk" style="font-size:11px;margin:2px 0;"><input type="checkbox" id="chk-audio-chime" checked /> 🔔 Audio Alert Chime (Web Audio Synthesizer)</label>
+      </div>
+      <div id="ddma-summary-card" class="ddma-summary-card persona-ddma-only" style="display:none;">
+        <div style="font-weight:700;font-size:11px;margin-bottom:4px;">🛡️ DDMA Incident Response Overview</div>
+        <div id="ddma-impact-stats" style="font-size:11px;color:var(--text);">Analyzing active storm footprints…</div>
+      </div>
+
       <div id="alerts-list" class="alerts"><div class="muted">no alerts</div></div>
     </section>
 

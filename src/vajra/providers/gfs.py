@@ -442,6 +442,82 @@ def resample_gfs_to_grid(
     return interp.astype(np.float32)
 
 
+def extract_thermodynamic_sounding(
+    gfs_data: dict[str, np.ndarray],
+    gfs_lats: np.ndarray | None = None,
+    gfs_lons: np.ndarray | None = None,
+    target_grid: GridSpec | None = None,
+) -> dict[str, np.ndarray]:
+    """Extract and derive complete atmospheric thermodynamic and kinematic sounding fields.
+
+    Extracts:
+    1. 'cape': Surface Convective Available Potential Energy (J/kg)
+    2. 'cin': Surface Convective Inhibition (J/kg)
+    3. 'shear_0_6km': 0–6 km Bulk Vertical Wind Shear magnitude (m/s)
+    4. 'rh_700': 700 hPa Relative Humidity (%)
+    5. 'brn': Bulk Richardson Number
+    6. 'gating_array': Spatial thermodynamic gating array gamma(x, y) in [0.1, 1.0]
+
+    If gfs_lats, gfs_lons, and target_grid are provided, all fields are cleanly
+    resampled onto target_grid.
+    """
+    grid = target_grid or make_india_grid()
+
+    # 1. Base arrays
+    cape = gfs_data.get("cape")
+    cin = gfs_data.get("cin")
+    u_10 = gfs_data.get("ugrd_10m")
+    v_10 = gfs_data.get("vgrd_10m")
+    u_500 = gfs_data.get("ugrd_500")
+    v_500 = gfs_data.get("vgrd_500")
+    rh_700 = gfs_data.get("rh_700")
+
+    # Resample if needed
+    if gfs_lats is not None and gfs_lons is not None:
+        if cape is not None:
+            cape = resample_gfs_to_grid(cape, gfs_lats, gfs_lons, grid)
+        if cin is not None:
+            cin = resample_gfs_to_grid(cin, gfs_lats, gfs_lons, grid)
+        if u_10 is not None:
+            u_10 = resample_gfs_to_grid(u_10, gfs_lats, gfs_lons, grid)
+        if v_10 is not None:
+            v_10 = resample_gfs_to_grid(v_10, gfs_lats, gfs_lons, grid)
+        if u_500 is not None:
+            u_500 = resample_gfs_to_grid(u_500, gfs_lats, gfs_lons, grid)
+        if v_500 is not None:
+            v_500 = resample_gfs_to_grid(v_500, gfs_lats, gfs_lons, grid)
+        if rh_700 is not None:
+            rh_700 = resample_gfs_to_grid(rh_700, gfs_lats, gfs_lons, grid)
+
+    # 2. Shear calculation
+    if u_10 is not None and v_10 is not None and u_500 is not None and v_500 is not None:
+        shear = compute_bulk_wind_shear_0_6km(u_10, v_10, u_500, v_500)
+    elif "shear_0_6km" in gfs_data:
+        shear = gfs_data["shear_0_6km"]
+        if gfs_lats is not None and gfs_lons is not None:
+            shear = resample_gfs_to_grid(shear, gfs_lats, gfs_lons, grid)
+    else:
+        shear = np.zeros((grid.nlat, grid.nlon), dtype=np.float32)
+
+    # 3. Bulk Richardson Number & Thermodynamic Gating Array
+    if cape is not None:
+        brn = compute_bulk_richardson_number(cape, shear)
+        cin_field = cin if cin is not None else np.zeros_like(cape)
+        gating = thermodynamic_gating_factor(cape, cin_field, shear)
+    else:
+        brn = np.zeros((grid.nlat, grid.nlon), dtype=np.float32)
+        gating = np.ones((grid.nlat, grid.nlon), dtype=np.float32)
+
+    return {
+        "cape": cape if cape is not None else np.zeros((grid.nlat, grid.nlon), dtype=np.float32),
+        "cin": cin if cin is not None else np.zeros((grid.nlat, grid.nlon), dtype=np.float32),
+        "shear_0_6km": shear.astype(np.float32),
+        "rh_700": rh_700 if rh_700 is not None else np.full((grid.nlat, grid.nlon), 50.0, dtype=np.float32),
+        "brn": brn.astype(np.float32),
+        "gating_array": gating.astype(np.float32),
+    }
+
+
 # =============================================================================
 # 5. Mock GFS GRIB2 & NPZ Generator
 # =============================================================================
@@ -710,3 +786,7 @@ class GfsNomadsProvider(AtmosphericDataProvider):
             log_event(logger, 30, "NOMADS download failed", error=str(exc))
 
         return None
+
+
+# Canonical provider alias for backward and forward compatibility
+GfsProvider = GfsNomadsProvider
