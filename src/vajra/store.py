@@ -111,7 +111,10 @@ class Store:
                      uncertainty_png: bytes | None = None) -> None:
         """fields: lead -> (p_grid, png_bytes). obs_png: grayscale detection-field render."""
         fdir = self.artifacts / forecast.id
-        fdir.mkdir(parents=True, exist_ok=True)
+        try:
+            fdir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
         if obs_png:
             (fdir / "obs.png").write_bytes(obs_png)
         if uncertainty_png:

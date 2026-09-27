@@ -67,6 +67,16 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
         CORSMiddleware, allow_origins=settings.api.cors_origins,
         allow_methods=["*"], allow_headers=["*"])
 
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request, exc):
+        import traceback
+        tb = traceback.format_exc()
+        logger.error(f"Unhandled exception on {request.url.path}: {tb}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal Server Error", "error": str(exc), "traceback": tb.splitlines()[-6:]}
+        )
+
     store = store or Store(settings)
     spatial_index = SpatialIndex()
     mosaic_engine = RadarMosaicEngine()

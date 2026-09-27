@@ -289,6 +289,7 @@ ADMIN_HIERARCHY = {
             "blocks": [
                 ("Cuttack Sadar", 85.88, 20.46, 0.09, 580000, 1901),
                 ("Salepur", 85.99, 20.48, 0.08, 260000, 1902),
+                ("Athgarh", 85.45, 20.55, 0.10, 190000, 1903),
             ],
         },
         "Jagatsinghpur": {
@@ -306,6 +307,14 @@ ADMIN_HIERARCHY = {
                 ("Puri Sadar", 85.83, 19.81, 0.09, 380000, 1961),
                 ("Pipili", 85.83, 20.02, 0.08, 260000, 1962),
                 ("Nimapada", 85.98, 20.06, 0.09, 240000, 1963),
+            ],
+        },
+        "Kendrapara": {
+            "headquarters": "Kendrapara",
+            "population": 2061923,
+            "blocks": [
+                ("Kendrapara Sadar", 86.42, 20.50, 0.09, 290000, 1971),
+                ("Rajnagar", 86.65, 20.20, 0.10, 210000, 1972),
             ],
         },
     },
