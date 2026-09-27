@@ -8,11 +8,13 @@ separable smoothing, and binary dilation. Deterministic, no compiled deps.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 
 
-def label(mask: np.ndarray) -> tuple[np.ndarray, int]:
-    """4-connectivity connected-component labelling of a boolean mask.
+def label(mask: np.ndarray, structure: np.ndarray | None = None, **kwargs: Any) -> tuple[np.ndarray, int]:
+    """Connected-component labelling of a boolean mask with optional 8-connectivity.
 
     Returns (label_image with 0 = background, n_components). Components are
     numbered 1..n in row-major order of their first pixel.
@@ -39,6 +41,8 @@ def label(mask: np.ndarray) -> tuple[np.ndarray, int]:
     starts_mat = (diff == 1)
     ends_mat = (diff == -1)
 
+    diag = bool(structure is not None and np.asarray(structure).sum() > 5)
+
     prev_runs: list[tuple[int, int, int]] = []
     for i in range(h):
         starts = np.flatnonzero(starts_mat[i])
@@ -51,7 +55,9 @@ def label(mask: np.ndarray) -> tuple[np.ndarray, int]:
             cur.append((int(s), int(e), new))
         for s, e, l in cur:
             for ps, pe, pl in prev_runs:
-                if s < pe and ps < e:  # column overlap (4-connectivity)
+                # 8-connectivity allows diagonal corner overlap: s <= pe and ps <= e
+                # 4-connectivity requires direct column overlap: s < pe and ps < e
+                if (s <= pe and ps <= e) if diag else (s < pe and ps < e):
                     union(l, pl)
         prev_runs = cur
 
