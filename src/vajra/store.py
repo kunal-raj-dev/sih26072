@@ -101,12 +101,15 @@ class Store:
 
     # -- forecasts ---------------------------------------------------------------
     def put_forecast(self, forecast: Forecast, fields: dict[int, tuple[np.ndarray, bytes]],
-                     obs_png: bytes | None = None) -> None:
+                     obs_png: bytes | None = None,
+                     uncertainty_png: bytes | None = None) -> None:
         """fields: lead -> (p_grid, png_bytes). obs_png: grayscale detection-field render."""
         fdir = self.artifacts / forecast.id
         fdir.mkdir(parents=True, exist_ok=True)
         if obs_png:
             (fdir / "obs.png").write_bytes(obs_png)
+        if uncertainty_png:
+            (fdir / "uncertainty.png").write_bytes(uncertainty_png)
         with self._lock:
             self._conn.execute(
                 "INSERT OR REPLACE INTO forecasts (id, run_id, event_id, issued_at, replay_time,"
@@ -149,6 +152,10 @@ class Store:
             "SELECT npz_path, png_path FROM forecast_fields WHERE forecast_id=? AND lead_minutes=?",
             (forecast_id, lead)).fetchone()
         return (Path(row["npz_path"]), Path(row["png_path"])) if row else None
+
+    def get_uncertainty_png_path(self, forecast_id: str) -> Path | None:
+        p = self.artifacts / forecast_id / "uncertainty.png"
+        return p if p.exists() else None
 
     # -- alerts -------------------------------------------------------------------
     def put_alerts(self, alerts: list[Alert]) -> None:

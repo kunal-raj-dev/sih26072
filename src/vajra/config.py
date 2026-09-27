@@ -142,6 +142,19 @@ class EarthdataConfig:
 
 
 @dataclass
+class MosdacConfig:
+    """ISRO MOSDAC credentials for INSAT-3D/3DR/3DS. Read from env/.env only."""
+
+    username: str = ""
+    password: str = ""
+    host: str = "www.mosdac.gov.in"
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.username and self.password)
+
+
+@dataclass
 class Settings:
     grid: GridConfig = field(default_factory=GridConfig)
     paths: PathsConfig = field(default_factory=PathsConfig)
@@ -151,6 +164,8 @@ class Settings:
     risk: RiskConfig = field(default_factory=RiskConfig)
     alerts: AlertsConfig = field(default_factory=AlertsConfig)
     basemaps: BasemapsConfig = field(default_factory=BasemapsConfig)
+    earthdata: EarthdataConfig = field(default_factory=EarthdataConfig)
+    mosdac: MosdacConfig = field(default_factory=MosdacConfig)
     api: ApiConfig = field(default_factory=ApiConfig)
     config_path: Path | None = None
 
@@ -231,5 +246,10 @@ def load_settings(config_path: Path | None = None) -> Settings:
         s.earthdata.username = os.environ.get("EARTHDATA_USERNAME", "")
     if not s.earthdata.password:
         s.earthdata.password = os.environ.get("EARTHDATA_PASSWORD", "")
+    s.mosdac = _apply_overrides(raw, "mosdac", MosdacConfig)
+    if not s.mosdac.username:
+        s.mosdac.username = os.environ.get("MOSDAC_USERNAME", "")
+    if not s.mosdac.password:
+        s.mosdac.password = os.environ.get("MOSDAC_PASSWORD", "")
     s.api = _apply_overrides(raw, "api", ApiConfig)
     return s

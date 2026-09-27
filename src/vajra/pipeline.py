@@ -23,6 +23,7 @@ from .alerts import AlertEngine
 from .cells import CellTracker
 from .config import Settings
 from .features import FEATURE_NAMES, build_features
+from .geocoding import SpatialIndex
 from .grid import GridSpec
 from .logsetup import get_logger, log_event
 from .models.base import CycleContext
@@ -65,12 +66,14 @@ class _PendingSample:
 
 class NowcastPipeline:
     def __init__(self, settings: Settings, sources: dict[Modality, object],
-                 router: ModelRouter, model_version: str = "unloaded"):
+                 router: ModelRouter, model_version: str = "unloaded",
+                 spatial_index: SpatialIndex | None = None):
         self.settings = settings
         self.sources = sources
         self.router = router
         self.model_version = model_version
-        self.alert_engine = AlertEngine(settings)
+        self.spatial_index = spatial_index if spatial_index is not None else SpatialIndex()
+        self.alert_engine = AlertEngine(settings, spatial_index=self.spatial_index)
         self.tracker: CellTracker | None = None
         self._active_grid: GridSpec | None = None
         self._store = None
@@ -102,9 +105,33 @@ class NowcastPipeline:
                 continue
             inten = np.clip((300.0 - f.field) / 95.0, 0.0, 1.0)
             proxy = (inten * 255.0).astype(np.float32)
-            out.append(f.with_meta(variable="ir_intensity_proxy", units="0-255 (IR proxy)",
-                                   note=(f.meta.note + " | " if f.meta.note else "")
-                                        + "IR->intensity proxy for detection; NOT radar"))
+            meta = f.meta.model_copy(update={
+                "variable": "ir_intensity_proxy",
+                "units": "0-255 (IR proxy)",
+                "note": (f.meta.note + " | " if f.meta.note else "")
+                        + "IR->intensity proxy for detection; NOT radar",
+            })
+            out.append(ObsFrame(meta=meta, field=proxy, points=f.points))
+        return out
+
+    @staticmethod
+    def _precipitation_as_radar_proxy(frames: list[ObsFrame]) -> list[ObsFrame]:
+        """Precipitation rate (mm/hr) -> 0..255 convective-intensity proxy so detection
+        can proceed when radar/satellite are absent. Every proxy frame is annotated."""
+        out = []
+        for f in frames:
+            if f.field is None:
+                continue
+            # 50 mm/hr represents very severe convection; map 0..50 mm/hr -> 0..255
+            inten = np.clip(f.field / 50.0, 0.0, 1.0)
+            proxy = (inten * 255.0).astype(np.float32)
+            meta = f.meta.model_copy(update={
+                "variable": "precip_intensity_proxy",
+                "units": "0-255 (Rain proxy)",
+                "note": (f.meta.note + " | " if f.meta.note else "")
+                        + "Rain->intensity proxy for detection; NOT radar",
+            })
+            out.append(ObsFrame(meta=meta, field=proxy, points=f.points))
         return out
 
     def _available(self, frames: list[ObsFrame], t: datetime) -> bool:
@@ -114,7 +141,10 @@ class NowcastPipeline:
         if worst in (QualityStatus.MISSING.value, QualityStatus.BAD.value):
             return False
         last = max(f.meta.time for f in frames)
-        limit = timedelta(minutes=max(3 * self.settings.replay.cycle_minutes, 30))
+        if frames and frames[0].meta.modality == Modality.MODEL:
+            limit = timedelta(hours=12)
+        else:
+            limit = timedelta(minutes=max(3 * self.settings.replay.cycle_minutes, 30))
         return (t - last) <= limit
 
     # -- one cycle -----------------------------------------------------------------
@@ -124,20 +154,35 @@ class NowcastPipeline:
         radar = self._history(Modality.RADAR, t)
         satellite = self._history(Modality.SATELLITE, t)
         lightning = self._history(Modality.LIGHTNING, t)
+        surface = self._history(Modality.SURFACE, t)
+        model = self._history(Modality.MODEL, t)
 
         radar_ok = self._available(radar, t)
         sat_ok = self._available(satellite, t)
         light_ok = self._available(lightning, t)
+        surface_ok = self._available(surface, t)
+        model_ok = self._available(model, t)
         available = {
             Modality.RADAR.value: radar_ok,
             Modality.SATELLITE.value: sat_ok,
             Modality.LIGHTNING.value: light_ok,
-            Modality.MODEL.value: False,  # NWP parser not provisioned (providers/nwp.py)
+            Modality.SURFACE.value: surface_ok,
+            Modality.MODEL.value: model_ok,
         }
 
-        det_frames = radar if radar_ok else self._satellite_as_radar_proxy(satellite)
-        det_mod = Modality.RADAR if radar_ok else Modality.SATELLITE
-        det_ok = self._available(det_frames, t)
+        if radar_ok:
+            det_frames = radar
+            det_mod = Modality.RADAR
+        elif sat_ok:
+            det_frames = self._satellite_as_radar_proxy(satellite)
+            det_mod = Modality.SATELLITE
+        elif surface_ok:
+            det_frames = self._precipitation_as_radar_proxy(surface)
+            det_mod = Modality.SURFACE
+        else:
+            det_frames = []
+            det_mod = Modality.RADAR
+        det_ok = self._available(det_frames, t) if det_frames else False
 
         if not det_ok:
             ctx = CycleContext(t=t, grid=self._active_grid, cells=[],
@@ -152,7 +197,8 @@ class NowcastPipeline:
                           data_quality={"radar": modality_health(radar),
                                         "satellite": modality_health(satellite),
                                         "lightning": modality_health(lightning),
-                                        "model": "MISSING"},
+                                        "surface": modality_health(surface),
+                                        "model": modality_health(model)},
                           confidence=0.05,
                           notes=["no usable detection field; climatology background only"])
             self._last_fields = {}
@@ -171,9 +217,13 @@ class NowcastPipeline:
         radar_for_feats = radar if radar_ok else []
         satellite_for_feats = satellite if sat_ok else []
         lightning_for_feats = lightning if light_ok else []
+        surface_for_feats = surface if surface_ok else []
+        model_for_feats = model if model_ok else []
         feats = build_features(t, cells, self.tracker, radar_for_feats,
                                satellite_for_feats, lightning_for_feats,
-                               self.settings.cells.flash_radius_km, grid)
+                               self.settings.cells.flash_radius_km, grid,
+                               surface_frames=surface_for_feats,
+                               model_frames=model_for_feats)
         if len(feats):
             fc30 = feats.set_index("_cell_id")["flash_cnt_30"].to_dict()
             for c in cells:
@@ -181,34 +231,72 @@ class NowcastPipeline:
 
         ctx = CycleContext(t=t, grid=grid, cells=cells,
                            radar_frames=radar_for_feats, satellite_frames=satellite_for_feats,
-                           lightning_frames=lightning_for_feats, features=feats,
+                           lightning_frames=lightning_for_feats, surface_frames=surface_for_feats,
+                           model_frames=model_for_feats,
+                           features=feats,
                            modalities_available=available,
                            flash_radius_km=self.settings.cells.flash_radius_km)
+
+        # Convective Initiation (CI) precursor detection from satellite & radar frames
+        from .models.ci import extract_ci_candidates_from_cycle
+        from .models.field_nowcast import compute_spatial_uncertainty_field, render_uncertainty_png
+
+        ci_candidates = extract_ci_candidates_from_cycle(
+            satellite_frames=satellite_for_feats,
+            radar_frames=radar_for_feats,
+            grid=grid,
+        )
 
         steps: list[ForecastStep] = []
         fields: dict[int, tuple[np.ndarray, bytes]] = {}
         p_by_lead: dict[int, dict[str, float]] = {}
         rung_by_lead: dict[int, FallbackRung] = {}
+        uncertainty_png = None
+
         for lead in self.settings.replay.lead_minutes:
-            routed = self.router.predict(ctx, lead, grid)
+            routed = self.router.predict(ctx, lead, grid, ci_candidates=ci_candidates)
             p_grid = routed.output.p_grid
             p_max = float(np.max(p_grid)) if p_grid is not None and p_grid.size else 0.0
             band = band_for_probability(p_max, self.settings.risk)
+
+            # Spatial uncertainty field
+            if p_grid is not None and p_grid.size:
+                u_grid = compute_spatial_uncertainty_field(
+                    p_grid=p_grid,
+                    lead_minutes=lead,
+                    grid=grid,
+                    missing_modalities=[m for m, ok in available.items() if not ok],
+                    radar_available=available.get(Modality.RADAR.value, False),
+                )
+                u_mean = float(np.mean(u_grid))
+                if uncertainty_png is None or lead == 30:
+                    uncertainty_png = render_uncertainty_png(u_grid)
+            else:
+                u_mean = 0.0
+
             steps.append(ForecastStep(valid_time=t + timedelta(minutes=lead),
                                       lead_minutes=lead, p_flash_max=round(p_max, 3),
-                                      risk_band=band, cells=cells))
+                                      risk_band=band, uncertainty_p_mean=round(u_mean, 3),
+                                      cells=cells))
             p_by_lead[lead] = dict(routed.output.p_cell)
             rung_by_lead[lead] = routed.rung
             if p_grid is not None:
                 fields[lead] = (p_grid.astype(np.float32), render_probability_png(p_grid))
 
-        confidence = self._confidence(available, radar + satellite + lightning)
+        self._uncertainty_png = uncertainty_png
+        confidence = self._confidence(available, radar + satellite + lightning + surface + model)
         rung_order = [r.value for r in FallbackRung]
         best_rung = min(rung_by_lead.values(),
                         key=lambda r: rung_order.index(r.value)) if rung_by_lead else FallbackRung.CLIMATOLOGY
         notes = []
         if det_mod == Modality.SATELLITE:
             notes.append("detection on IR intensity proxy (radar unavailable) — reduced-modality rung")
+        elif det_mod == Modality.SURFACE:
+            notes.append("detection on IMERG precipitation proxy (radar/satellite unavailable) — reduced-modality rung")
+        if not model_ok and Modality.MODEL in self.sources:
+            notes.append("NWP environmental model unavailable/delayed — running reduced-modality fallback")
+        if ci_candidates:
+            notes.append(f"{len(ci_candidates)} convective initiation precursor candidate(s) tracked (15-45m lead)")
         forecast = Forecast(
             run_id=run_id, event_id=event_id, replay_time=t, mode=mode, fallback_rung=best_rung,
             model_version=self.model_version, grid=_meta_of(grid),
@@ -216,8 +304,10 @@ class NowcastPipeline:
             data_quality={"radar": modality_health(radar),
                           "satellite": modality_health(satellite),
                           "lightning": modality_health(lightning),
-                          "model": "MISSING"},
+                          "surface": modality_health(surface),
+                          "model": modality_health(model)},
             steps=steps, confidence=round(confidence, 3), notes=notes,
+            ci_candidates=ci_candidates,
         )
         alerts = self.alert_engine.generate(forecast, cells,
                                             lead_minutes=max(p_by_lead) if p_by_lead else None,
@@ -292,7 +382,8 @@ class NowcastPipeline:
                             self._last_feature_rows))
             if self._store is not None:
                 self._store.put_forecast(forecast, self._last_fields,
-                                         obs_png=getattr(self, "_obs_png", None))
+                                         obs_png=getattr(self, "_obs_png", None),
+                                         uncertainty_png=getattr(self, "_uncertainty_png", None))
                 self._store.put_alerts(alerts)
             t += timedelta(minutes=step)
 

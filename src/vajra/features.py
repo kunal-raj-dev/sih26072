@@ -33,10 +33,13 @@ FEATURE_NAMES = [
     "track_age", "motion_speed_km_h",
     "flash_cnt_10", "flash_cnt_20", "flash_cnt_30",
     "ir_min", "ir_cooling_10",
-    "env_cape", "env_shear",  # NWP features: NaN when MODEL modality unavailable
+    "cape_jkg", "shear_0_6km_ms", "rh_700hpa_pct", "cin_jkg",
 ]
 
-FEATURE_NAMES_NO_ENV = [f for f in FEATURE_NAMES if not f.startswith("env_")]
+FEATURE_NAMES_NO_ENV = [
+    f for f in FEATURE_NAMES
+    if f not in ("cape_jkg", "shear_0_6km_ms", "rh_700hpa_pct", "cin_jkg", "env_cape", "env_shear")
+]
 
 
 def _flash_history(lightning_frames: list[ObsFrame]) -> tuple[np.ndarray, np.ndarray]:
@@ -81,10 +84,87 @@ def _ir_min_in_bbox(ir_frames: list[ObsFrame], bbox: list[float]) -> float | Non
     return float(sub.min()) if sub.size else None
 
 
+def _precip_stats_in_bbox(precip_frames: list[ObsFrame], bbox: list[float]) -> tuple[float | None, float | None]:
+    """Sample maximum and mean precipitation (mm/hr) within storm cell bounding box."""
+    if not precip_frames:
+        return None, None
+    fr = precip_frames[-1]
+    if fr.field is None:
+        return None, None
+    g = fr.meta.grid
+    half_lon = abs(g.dlon) / 2.0
+    half_lat = abs(g.dlat) / 2.0
+    j0 = int(np.floor((bbox[0] + half_lon - g.lon0) / g.dlon)) if g.dlon != 0 else 0
+    j1 = int(np.ceil((bbox[2] - half_lon - g.lon0) / g.dlon)) if g.dlon != 0 else g.nlon - 1
+    if g.dlat < 0:
+        i0 = int(np.floor((bbox[3] - half_lat - g.lat0) / g.dlat))
+        i1 = int(np.ceil((bbox[1] + half_lat - g.lat0) / g.dlat))
+    else:
+        i0 = int(np.floor((bbox[1] - half_lat - g.lat0) / g.dlat))
+        i1 = int(np.ceil((bbox[3] + half_lat - g.lat0) / g.dlat))
+    j0, i0 = max(0, min(j0, j1)), max(0, min(i0, i1))
+    j1, i1 = min(g.nlon - 1, max(j0, j1)), min(g.nlat - 1, max(i0, i1))
+    if j1 < j0 or i1 < i0:
+        return None, None
+    sub = fr.field[i0:i1 + 1, j0:j1 + 1]
+    sub = sub[np.isfinite(sub)]
+    if not sub.size:
+        return None, None
+    return float(sub.max()), float(sub.mean())
+
+
 def motion_speed_km_h(cell: Cell) -> float:
     km_h_lat = cell.motion_dlat * KM_PER_DEG_LAT
     km_h_lon = cell.motion_dlon * KM_PER_DEG_LAT * np.cos(np.radians(cell.centroid_lat))
     return float(np.hypot(km_h_lat, km_h_lon))
+
+
+def _sample_nwp_at_centroid(
+    nwp_frames: list[ObsFrame] | None,
+    lat: float,
+    lon: float,
+) -> dict[str, float]:
+    """Sample NWP thermodynamic indices (CAPE, Shear, RH, CIN) at storm cell centroid."""
+    defaults = {
+        "cape_jkg": np.nan,
+        "shear_0_6km_ms": np.nan,
+        "rh_700hpa_pct": np.nan,
+        "cin_jkg": np.nan,
+    }
+    if not nwp_frames:
+        return defaults
+
+    out = dict(defaults)
+    var_map = {
+        "cape_jkg": "cape_jkg",
+        "cape": "cape_jkg",
+        "cin_jkg": "cin_jkg",
+        "cin": "cin_jkg",
+        "shear_0_6km_ms": "shear_0_6km_ms",
+        "shear_0_6km": "shear_0_6km_ms",
+        "shear": "shear_0_6km_ms",
+        "rh_700hpa_pct": "rh_700hpa_pct",
+        "rh_700": "rh_700hpa_pct",
+        "rh": "rh_700hpa_pct",
+    }
+
+    for fr in reversed(nwp_frames):
+        var = fr.meta.variable.lower()
+        target_key = var_map.get(var)
+        if target_key and np.isnan(out[target_key]) and fr.field is not None:
+            g = fr.meta.grid
+            idx = g.index_of(lat, lon) if hasattr(g, "index_of") else None
+            if idx is None:
+                i = int(round((lat - g.lat0) / g.dlat))
+                j = int(round((lon - g.lon0) / g.dlon))
+                if 0 <= i < g.nlat and 0 <= j < g.nlon:
+                    idx = (i, j)
+            if idx is not None:
+                val = float(fr.field[idx[0], idx[1]])
+                if np.isfinite(val):
+                    out[target_key] = val
+
+    return out
 
 
 def build_features(
@@ -96,9 +176,13 @@ def build_features(
     lightning_frames: list[ObsFrame],
     flash_radius_km: float,
     grid: GridSpec,
+    surface_frames: list[ObsFrame] | None = None,
+    model_frames: list[ObsFrame] | None = None,
+    nwp_frames: list[ObsFrame] | None = None,
 ) -> pd.DataFrame:
-    """One row per cell with FEATURE_NAMES columns (env_* = NaN)."""
+    """One row per cell with FEATURE_NAMES columns (16 features)."""
     pts, pts_t = _flash_history(lightning_frames)
+    nwp_all = (model_frames or []) + (nwp_frames or [])
     rows = []
     for cell in cells:
         t10 = t - timedelta(minutes=10)
@@ -122,6 +206,9 @@ def build_features(
         ir_now = _ir_min_in_bbox(satellite_frames, cell.bbox)
         ir_prev = _ir_min_in_bbox([f for f in satellite_frames if f.meta.time <= t10], cell.bbox)
         ir_cool = (ir_prev - ir_now) if (ir_now is not None and ir_prev is not None) else np.nan
+        rain_max, rain_mean = _precip_stats_in_bbox(surface_frames or [], cell.bbox)
+        nwp_vals = _sample_nwp_at_centroid(nwp_all, cell.centroid_lat, cell.centroid_lon)
+
         rows.append({
             "vil_max": cell.max_intensity,
             "vil_mean": cell.mean_intensity,
@@ -135,8 +222,14 @@ def build_features(
             "flash_cnt_30": fc30,
             "ir_min": ir_now if ir_now is not None else np.nan,
             "ir_cooling_10": ir_cool,
-            "env_cape": np.nan,
-            "env_shear": np.nan,
+            "rain_max": rain_max if rain_max is not None else np.nan,
+            "rain_mean": rain_mean if rain_mean is not None else np.nan,
+            "cape_jkg": nwp_vals["cape_jkg"],
+            "shear_0_6km_ms": nwp_vals["shear_0_6km_ms"],
+            "rh_700hpa_pct": nwp_vals["rh_700hpa_pct"],
+            "cin_jkg": nwp_vals["cin_jkg"],
+            "env_cape": nwp_vals["cape_jkg"],
+            "env_shear": nwp_vals["shear_0_6km_ms"],
             # join keys / metadata (not model features)
             "_cell_id": cell.id,
             "_centroid_lat": cell.centroid_lat,

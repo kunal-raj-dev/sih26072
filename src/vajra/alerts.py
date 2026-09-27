@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from .config import Settings
+from .geocoding import SpatialIndex
 from .risk import band_for_probability, motion_speed, recommended_action, risk_factors
 from .schemas import Alert, Cell, DataMode, Forecast, QualityStatus
 
@@ -26,9 +27,10 @@ def _severity_for(p: float, preset_cfg) -> str:
 
 
 class AlertEngine:
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, spatial_index: SpatialIndex | None = None):
         self.cfg = settings.alerts
         self.risk_cfg = settings.risk
+        self.spatial_index = spatial_index if spatial_index is not None else SpatialIndex()
         self._recent: list[tuple[str, str, str, datetime]] = []  # (cell_id, severity, preset, issued_at)
 
     def reset(self) -> None:
@@ -60,6 +62,40 @@ class AlertEngine:
                     continue
                 factors = risk_factors(cell, p, conf)
                 band = band_for_probability(p, self.risk_cfg)
+
+                fallback_region = f"Cell {cell.id} ({band})"
+                region_name = fallback_region
+                affected_districts: list[str] = []
+                affected_blocks: list[str] = []
+                pop_exposed: int = 0
+
+                if self.spatial_index and self.spatial_index.is_ready():
+                    intersections = self.spatial_index.intersect_cell(cell)
+                    if intersections:
+                        region_name = self.spatial_index.format_region_name(
+                            intersections, fallback=fallback_region
+                        )
+                        affected_districts = list(
+                            dict.fromkeys(ix.entity.district for ix in intersections)
+                        )
+                        affected_blocks = list(
+                            dict.fromkeys(ix.entity.name for ix in intersections)
+                        )
+                        pop_exposed = sum(ix.exposed_population for ix in intersections)
+                    else:
+                        matches = self.spatial_index.query_point(
+                            cell.centroid_lat, cell.centroid_lon
+                        )
+                        if matches:
+                            region_name = self.spatial_index.format_region_name(
+                                matches, fallback=fallback_region
+                            )
+                            affected_districts = list(
+                                dict.fromkeys(m.district for m in matches)
+                            )
+                            affected_blocks = list(dict.fromkeys(m.name for m in matches))
+                            pop_exposed = sum(m.population for m in matches)
+
                 alert = Alert(
                     run_id=forecast.run_id or forecast.id,
                     event_id=forecast.event_id,
@@ -67,7 +103,7 @@ class AlertEngine:
                     valid_until=forecast.replay_time + timedelta(minutes=self.cfg.validity_minutes),
                     severity=sev,  # type: ignore[arg-type]
                     hazard="LIGHTNING",
-                    region_name=f"Cell {cell.id} ({band})",
+                    region_name=region_name,
                     bbox=cell.bbox,
                     probability=round(p, 3),
                     confidence=round(conf, 3),
@@ -83,6 +119,9 @@ class AlertEngine:
                     mode=forecast.mode,
                     data_quality=forecast.data_quality,
                     recommended_action=recommended_action(sev, preset_name),
+                    affected_districts=affected_districts,
+                    affected_blocks=affected_blocks,
+                    population_exposed=pop_exposed,
                 )
                 alerts.append(alert)
                 self._recent.append((cell.id, sev, preset_name, forecast.replay_time))

@@ -59,7 +59,13 @@
       <label class="chk"><input type="checkbox" id="lyr-prob" checked /> Forecast flash probability</label>
       <label class="chk"><input type="checkbox" id="lyr-obs" checked /> Observation field</label>
       <label class="chk"><input type="checkbox" id="lyr-cells" checked /> Storm cells</label>
+      <label class="chk"><input type="checkbox" id="lyr-cones" checked /> Projected tracks &amp; cones (60 min)</label>
       <label class="chk"><input type="checkbox" id="lyr-flashes" checked /> Lightning flashes</label>
+      <label class="chk"><input type="checkbox" id="lyr-admin" checked /> Administrative boundaries</label>
+      <label class="chk"><input type="checkbox" id="lyr-radar-rings" checked /> Radar range rings (100 / 250 km)</label>
+      <label class="chk"><input type="checkbox" id="lyr-radar-mosaic" /> Multi-Radar Composite (dBZ)</label>
+      <label class="chk"><input type="checkbox" id="lyr-ci" checked /> Convective Initiation (precursor)</label>
+      <label class="chk"><input type="checkbox" id="lyr-uncertainty" /> Forecast Uncertainty field</label>
       <label class="chk"><input type="checkbox" id="lyr-live" /> IMD radar (LIVE, visual only)</label>
       <div class="station-row">
         <select id="station-select" aria-label="IMD radar station">
@@ -106,6 +112,8 @@
         <div><span class="sw" style="background:rgba(249,115,22,0.8)"></span> ELEVATED ≥ 0.40</div>
         <div><span class="sw" style="background:rgba(239,68,68,0.85)"></span> HIGH ≥ 0.60</div>
         <div><span class="sw" style="background:rgba(168,0,230,0.9)"></span> SEVERE ≥ 0.80</div>
+        <div><span class="sw" style="background:rgba(0,229,255,0.7)"></span> Convective Initiation (cyan)</div>
+        <div><span class="sw" style="background:rgba(220,180,50,0.6)"></span> Forecast Uncertainty (amber)</div>
         <div><span class="sw" style="background:rgba(220,220,220,0.6)"></span> observation field (grey)</div>
         <div><span class="sw sw-dot"></span> actual GLM flash</div>
       </div>

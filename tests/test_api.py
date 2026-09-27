@@ -120,3 +120,31 @@ def test_unknown_forecast_is_404(client):
 
 def test_unknown_radar_station_404(client):
     assert client.get("/api/v1/observations/radar/atlantis.gif").status_code == 404
+
+
+def test_admin_districts_endpoint(client):
+    r = client.get("/api/v1/admin/districts")
+    assert r.status_code == 200
+    fc = r.json()
+    assert fc["type"] == "FeatureCollection"
+    assert len(fc["features"]) > 0
+    props = fc["features"][0]["properties"]
+    assert "district" in props
+    assert "state" in props
+    assert "population" in props
+
+
+def test_admin_blocks_endpoint(client):
+    r = client.get("/api/v1/admin/blocks")
+    assert r.status_code == 200
+    fc = r.json()
+    assert fc["type"] == "FeatureCollection"
+    assert len(fc["features"]) > 0
+
+    # Test filtering by district
+    r_filtered = client.get("/api/v1/admin/blocks?district=Patna")
+    assert r_filtered.status_code == 200
+    fc_filtered = r_filtered.json()
+    assert len(fc_filtered["features"]) > 0
+    for feat in fc_filtered["features"]:
+        assert feat["properties"]["district"].lower() == "patna"

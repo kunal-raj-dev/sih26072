@@ -123,6 +123,26 @@ class Cell(BaseModel):
     motion_dlon: float = 0.0
     flash_count_history: int = 0
     intensity_units: str = "raw"
+    velocity_kmh: float = 0.0
+    heading_deg: float = 0.0
+    projected_track: list[list[float]] = Field(default_factory=list)  # [[lon, lat], ...]
+    uncertainty_cone: list[list[float]] = Field(default_factory=list) # polygon [[lon, lat], ...]
+    dbz_max: float = 0.0
+    core_area_km2: float = 0.0
+
+
+class CICandidate(BaseModel):
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex[:8])
+    centroid_lat: float
+    centroid_lon: float
+    bbox: list[float]  # [min_lon, min_lat, max_lon, max_lat]
+    cooling_rate_k_per_15m: float
+    ir_brightness_temp_k: float
+    ir_wv_diff_k: float
+    p_initiation: float
+    estimated_lead_min: int = 30  # typical lead time to first flash: 15-45 min
+    area_km2: float = 0.0
+    polygon: list[list[float]] = Field(default_factory=list)  # [[lon, lat], ...]
 
 
 class ForecastStep(BaseModel):
@@ -131,6 +151,7 @@ class ForecastStep(BaseModel):
     p_flash_max: float
     risk_band: str
     field_ref: str = ""          # path/URL of rendered field artifact (PNG/npz)
+    uncertainty_p_mean: float = 0.0
     cells: list[Cell] = Field(default_factory=list)
 
 
@@ -149,6 +170,7 @@ class Forecast(BaseModel):
     steps: list[ForecastStep] = Field(default_factory=list)
     confidence: float = 0.0      # 0..1 overall confidence for this cycle (documented heuristic)
     notes: list[str] = Field(default_factory=list)
+    ci_candidates: list[CICandidate] = Field(default_factory=list)
 
 
 class Alert(BaseModel):
@@ -172,6 +194,9 @@ class Alert(BaseModel):
     mode: DataMode
     data_quality: dict[str, str] = Field(default_factory=dict)
     recommended_action: str = ""
+    affected_districts: list[str] = Field(default_factory=list)
+    affected_blocks: list[str] = Field(default_factory=list)
+    population_exposed: int = 0
 
 
 class DataHealth(BaseModel):

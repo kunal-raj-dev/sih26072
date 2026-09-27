@@ -33,24 +33,33 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from ..config import Settings, load_settings
+from ..geocoding import SpatialIndex
+from ..grid import india_grid
 from ..logsetup import get_logger
 from ..providers import (
     GfsNcepProvider,
     ImradarGifProvider,
     ImergProvider,
+    LisProvider,
+    MosdacProvider,
+    RadarMosaicEngine,
     SevirCatalog,
     SevirReplayEvent,
     SyntheticProvider,
+    compute_cooling_rate,
     default_bihar_event,
+    detect_convective_initiation,
+    simulate_synthetic_radar_scan,
 )
 from ..providers.sevir import SevirLightningProvider, SevirRadarProvider, SevirSatelliteProvider
+from ..render import render_reflectivity_png
 from ..schemas import DataHealth, DataMode, Event, Modality
 from ..store import Store
 
 logger = get_logger("vajra.api")
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, store: Store | None = None) -> FastAPI:
     settings = settings or load_settings()
     app = FastAPI(title="Project Vajra API", version="0.1.0",
                   description="Thunderstorm & lightning nowcasting decision support (SIH 2026 PS 26072)")
@@ -58,12 +67,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         CORSMiddleware, allow_origins=settings.api.cors_origins,
         allow_methods=["*"], allow_headers=["*"])
 
-    store = Store(settings)
-    state = {"settings": settings, "store": store, "pipeline_holder": None}
+    store = store or Store(settings)
+    spatial_index = SpatialIndex()
+    mosaic_engine = RadarMosaicEngine()
+    state = {
+        "settings": settings,
+        "store": store,
+        "pipeline_holder": None,
+        "spatial_index": spatial_index,
+        "mosaic_engine": mosaic_engine,
+    }
 
     radar_gif = ImradarGifProvider(settings)
-    nwp = GfsNcepProvider()
+    nwp = GfsNcepProvider(settings)
     imerg = ImergProvider(settings)
+    mosdac = MosdacProvider(settings)
+    lis = LisProvider(settings)
 
     # ---- health ------------------------------------------------------------
     @app.get("/api/v1/health")
@@ -79,7 +98,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/v1/data-health", response_model_exclude_none=True)
     def data_health() -> list[DataHealth]:
-        items = [radar_gif.health(), nwp.health(), imerg.health()]
+        items = [radar_gif.health(), nwp.health(), imerg.health(), mosdac.health(), lis.health()]
         store.put_data_health(items)
         # Add provider health of the last replay run's sources if a pipeline exists.
         ph = state["pipeline_holder"]
@@ -206,6 +225,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                               "motion_dlat": c.motion_dlat, "motion_dlon": c.motion_dlon,
                               "flash_history": c.flash_count_history,
                               "centroid_lat": c.centroid_lat, "centroid_lon": c.centroid_lon,
+                              "velocity_kmh": c.velocity_kmh,
+                              "heading_deg": c.heading_deg,
+                              "dbz_max": c.dbz_max,
+                              "core_area_km2": c.core_area_km2,
+                              "projected_track": c.projected_track,
+                              "uncertainty_cone": c.uncertainty_cone,
                               "geo_note": f.grid.geolocation if f.grid else "unknown",
                           }})
         return {"type": "FeatureCollection", "features": feats}
@@ -216,6 +241,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not p.exists():
             raise HTTPException(404, "observation render not available for this forecast")
         return FileResponse(p, media_type="image/png")
+
+    @app.get("/api/v1/forecasts/{fid}/uncertainty.png")
+    def forecast_uncertainty_png(fid: str) -> FileResponse:
+        p = store.get_uncertainty_png_path(fid)
+        if not p or not p.exists():
+            raise HTTPException(404, "uncertainty field render not available for this forecast")
+        return FileResponse(p, media_type="image/png")
+
+    @app.get("/api/v1/forecasts/{fid}/ci.geojson")
+    def forecast_ci_geojson(fid: str) -> dict:
+        f = store.get_forecast(fid)
+        if not f:
+            raise HTTPException(404, "forecast not found")
+        feats = []
+        for c in getattr(f, "ci_candidates", []):
+            poly = [c.polygon] if c.polygon else [[[c.bbox[0], c.bbox[1]], [c.bbox[2], c.bbox[1]],
+                                                   [c.bbox[2], c.bbox[3]], [c.bbox[0], c.bbox[3]],
+                                                   [c.bbox[0], c.bbox[1]]]]
+            feats.append({
+                "type": "Feature",
+                "geometry": {"type": "Polygon", "coordinates": poly},
+                "properties": {
+                    "id": c.id,
+                    "centroid_lat": c.centroid_lat,
+                    "centroid_lon": c.centroid_lon,
+                    "cooling_rate_k_per_15m": c.cooling_rate_k_per_15m,
+                    "ir_brightness_temp_k": c.ir_brightness_temp_k,
+                    "ir_wv_diff_k": c.ir_wv_diff_k,
+                    "p_initiation": c.p_initiation,
+                    "estimated_lead_min": c.estimated_lead_min,
+                    "area_km2": c.area_km2,
+                },
+            })
+        return {"type": "FeatureCollection", "features": feats}
 
     @app.get("/api/v1/events/{event_id}/flashes.geojson")
     def event_flashes(event_id: str) -> dict:
@@ -276,6 +335,175 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return Response(content=content, media_type=ct,
                         headers={"Cache-Control": "no-store",
                                  "X-Data-Mode": "LIVE-VISUAL-ONLY (not numeric radar)"})
+
+    # ---- administrative boundaries & geocoding --------------------------------
+    @app.get("/api/v1/admin/districts")
+    def admin_districts() -> dict:
+        return spatial_index.get_district_geojson()
+
+    @app.get("/api/v1/admin/blocks")
+    def admin_blocks(district: str | None = None) -> dict:
+        return spatial_index.get_blocks_geojson(district=district)
+
+    # ---- multi-radar mosaic & stations ---------------------------------------
+    @app.get("/api/v1/radar/stations")
+    def radar_stations() -> list[dict]:
+        return [
+            {
+                "id": s.id,
+                "name": s.name,
+                "lat": s.lat,
+                "lon": s.lon,
+                "altitude_m": s.altitude_m,
+                "max_range_km": s.max_range_km,
+                "rings_km": list(s.rings_km),
+                "band": s.band,
+                "status": s.status,
+            }
+            for s in mosaic_engine.stations
+        ]
+
+    @app.get("/api/v1/radar/rings.geojson")
+    def radar_rings() -> dict:
+        return mosaic_engine.generate_rings_geojson()
+
+    @app.get("/api/v1/radar/mosaic/latest")
+    def radar_mosaic_latest() -> dict:
+        grid = india_grid(settings.grid.step_deg)
+        cores = [(25.6, 85.1, 56.0, 18.0), (25.1, 84.7, 48.0, 15.0)]
+        scans = [
+            simulate_synthetic_radar_scan(s, grid, cores)
+            for s in [mosaic_engine.get_station("patna"), mosaic_engine.get_station("ranchi"), mosaic_engine.get_station("kolkata")]
+            if s is not None
+        ]
+        _, meta = mosaic_engine.composite(scans, grid, method="max")
+        meta["timestamp"] = datetime.now(timezone.utc).isoformat()
+        return meta
+
+    @app.get("/api/v1/radar/mosaic/field.png")
+    def radar_mosaic_png(method: str = "max") -> Response:
+        grid = india_grid(settings.grid.step_deg)
+        cores = [(25.6, 85.1, 56.0, 18.0), (25.1, 84.7, 48.0, 15.0)]
+        scans = [
+            simulate_synthetic_radar_scan(s, grid, cores)
+            for s in [mosaic_engine.get_station("patna"), mosaic_engine.get_station("ranchi"), mosaic_engine.get_station("kolkata")]
+            if s is not None
+        ]
+        comp, _ = mosaic_engine.composite(scans, grid, method=method)  # type: ignore[arg-type]
+        png = render_reflectivity_png(comp)
+        return Response(
+            content=png,
+            media_type="image/png",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Data-Mode": "COMPOSITE-RADAR-MOSAIC",
+            },
+        )
+
+    # ---- MOSDAC INSAT & Convective Initiation ---------------------------------
+    @app.get("/api/v1/satellite/mosdac/status")
+    def mosdac_status() -> dict:
+        h = mosdac.health()
+        return {
+            "source": h.source,
+            "status": h.status.value,
+            "message": h.message,
+            "last_success": h.last_success.isoformat() if h.last_success else None,
+            "cache_dir": str(mosdac.cache_dir),
+            "processed_dir": str(mosdac.processed_dir),
+        }
+
+    @app.get("/api/v1/satellite/ci/latest")
+    def convective_initiation_latest() -> dict:
+        grid = india_grid(settings.grid.step_deg)
+        now = datetime.now(timezone.utc)
+        history = mosdac.get_history(now, 60)
+        if len(history) >= 2:
+            dt_min = (history[-1].meta.time - history[-2].meta.time).total_seconds() / 60.0
+            cr = compute_cooling_rate(history[-1].field, history[-2].field, dt_minutes=dt_min)
+            ci = detect_convective_initiation(history[-1].field, cooling_rate_15m=cr, grid=grid)
+            return {
+                "timestamp": history[-1].meta.time.isoformat(),
+                "candidate_count": ci["candidate_count"],
+                "candidates": ci["candidates"],
+            }
+        return {
+            "timestamp": now.isoformat(),
+            "candidate_count": 0,
+            "candidates": [],
+            "note": "Awaiting 2+ sequential INSAT observation frames to compute cloud-top cooling rates",
+        }
+
+    # ---- NASA ISS LIS Lightning ----------------------------------------------
+    @app.get("/api/v1/satellite/lis/latest")
+    def lis_latest() -> dict:
+        h = lis.health()
+        now = datetime.now(timezone.utc)
+        frames = lis.get_history(now, 120)
+        pts = frames[-1].points if frames else None
+        features = []
+        if pts is not None:
+            for lat, lon, energy, epoch in pts:
+                features.append({
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [float(lon), float(lat)]},
+                    "properties": {
+                        "energy_uj": float(energy),
+                        "time_epoch": float(epoch),
+                        "sensor": "ISS_LIS",
+                    }
+                })
+        return {
+            "status": h.status.value,
+            "message": h.message,
+            "total_flashes": len(features),
+            "type": "FeatureCollection",
+            "features": features,
+        }
+
+    # ---- NOAA GFS NWP Environmental Intelligence -----------------------------
+    @app.get("/api/v1/nwp/gfs/status")
+    def gfs_status() -> dict:
+        h = nwp.health()
+        return {
+            "source": nwp.name,
+            "modality": nwp.modality.value,
+            "status": h.status.value,
+            "message": h.message,
+            "last_success": h.last_success.isoformat() if h.last_success else None,
+            "cache_dir": str(nwp.cache_dir),
+            "cached_cycles": len(nwp._history_frames),
+            "variables": ["cape_jkg", "cin_jkg", "shear_0_6km_ms", "rh_700hpa_pct"],
+        }
+
+    @app.get("/api/v1/nwp/gfs/indices")
+    def gfs_indices() -> dict:
+        h = nwp.health()
+        now = datetime.now(timezone.utc)
+        frames = nwp.get_history(now, 720)
+        if not frames:
+            return {
+                "status": h.status.value,
+                "message": h.message,
+                "available": False,
+                "indices": {},
+            }
+        stats = {}
+        for fr in frames:
+            vname = fr.meta.variable
+            if fr.field is not None and vname not in stats:
+                stats[vname] = {
+                    "units": fr.meta.units,
+                    "min": float(np.nanmin(fr.field)),
+                    "max": float(np.nanmax(fr.field)),
+                    "mean": float(np.nanmean(fr.field)),
+                    "timestamp": fr.meta.time.isoformat(),
+                }
+        return {
+            "status": h.status.value,
+            "available": True,
+            "indices": stats,
+        }
 
     # ---- static frontend ---------------------------------------------------------
     web = settings.web_dist
@@ -374,7 +602,8 @@ def _ensure_pipeline(event_id: str, settings: Settings, store: Store, state: dic
     router = ModelRouter(fusion=fusion, physics=physics,
                          persistence=persistence, climatology=climatology)
     pipeline = NowcastPipeline(settings, sources, router,
-                               model_version=fusion.version if fusion else "baselines-v1")
+                               model_version=fusion.version if fusion else "baselines-v1",
+                               spatial_index=state.get("spatial_index"))
     pipeline.attach_store(store)
     state["pipeline_holder"] = {"pipeline": pipeline, "sources": sources,
                                 "event": event, "mode": mode}

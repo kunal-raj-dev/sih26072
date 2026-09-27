@@ -74,26 +74,188 @@ map.on("load", () => {
     id: "flashes-layer", type: "circle", source: "flashes",
     paint: { "circle-radius": 3.2, "circle-color": "#ffffff", "circle-stroke-color": "#93c5fd", "circle-stroke-width": 1 },
   });
+
+  // Convective Initiation (precursor) candidates
+  map.addSource("ci-candidates", { type: "geojson", data: emptyFC() });
+  map.addLayer({
+    id: "ci-fill", type: "fill", source: "ci-candidates",
+    paint: { "fill-color": "#00e5ff", "fill-opacity": 0.28 },
+  });
+  map.addLayer({
+    id: "ci-layer", type: "line", source: "ci-candidates",
+    paint: { "line-color": "#00e5ff", "line-width": 2.2, "line-dasharray": [3, 2] },
+  });
+  map.on("mouseenter", "ci-fill", () => map.getCanvas().style.cursor = "pointer");
+  map.on("mouseleave", "ci-fill", () => map.getCanvas().style.cursor = "");
+  map.on("click", "ci-fill", (e) => {
+    if (!e.features || !e.features[0]) return;
+    const p = e.features[0].properties;
+    new maplibregl.Popup()
+      .setLngLat(e.lngLat)
+      .setHTML(`<strong>⚡ Convective Initiation (CI Precursor)</strong><br/>
+                Cooling Rate: <strong>${p.cooling_rate_k_per_15m} K / 15m</strong><br/>
+                Min Cloud-Top IR: <strong>${p.ir_brightness_temp_k} K</strong><br/>
+                P(Initiation): <strong>${(p.p_initiation * 100).toFixed(0)}%</strong><br/>
+                Est. Lead to First Flash: <strong>${p.estimated_lead_min} min</strong><br/>
+                Area: <strong>${p.area_km2} km²</strong>`)
+      .addTo(map);
+  });
+
+  // Uncertainty Overlay
+  map.addSource("uncertainty-overlay", { type: "image", url: PLACEHOLDER_PNG, coordinates: DEFAULT_BOX });
+  map.addLayer({
+    id: "uncertainty-layer", type: "raster", source: "uncertainty-overlay",
+    paint: { "raster-opacity": 0.65 },
+    layout: { visibility: "none" },
+  });
+
   map.on("mouseenter", "cells-fill", () => map.getCanvas().style.cursor = "pointer");
   map.on("mouseleave", "cells-fill", () => map.getCanvas().style.cursor = "");
   map.on("click", "cells-fill", cellPopup);
+
+  // Administrative boundaries (Districts & Blocks)
+  map.addSource("admin-districts", { type: "geojson", data: `${API}/admin/districts` });
+  map.addSource("admin-blocks", { type: "geojson", data: `${API}/admin/blocks`, generateId: true });
+
+  map.addLayer({
+    id: "admin-blocks-fill", type: "fill", source: "admin-blocks",
+    paint: {
+      "fill-color": "#0284c7",
+      "fill-opacity": ["case", ["boolean", ["feature-state", "hover"], false], 0.22, 0.0]
+    },
+  });
+  map.addLayer({
+    id: "admin-blocks-line", type: "line", source: "admin-blocks",
+    paint: {
+      "line-color": "#475569",
+      "line-width": 0.9,
+      "line-opacity": 0.45,
+      "line-dasharray": [2, 2]
+    },
+  });
+  map.addLayer({
+    id: "admin-districts-line", type: "line", source: "admin-districts",
+    paint: {
+      "line-color": "#38bdf8",
+      "line-width": 1.6,
+      "line-opacity": 0.75
+    },
+  });
+
+  let hoveredBlockId = null;
+  const adminPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
+
+  map.on("mousemove", "admin-blocks-fill", (e) => {
+    if (e.features && e.features.length > 0) {
+      if (hoveredBlockId !== null) {
+        map.setFeatureState({ source: "admin-blocks", id: hoveredBlockId }, { hover: false });
+      }
+      hoveredBlockId = e.features[0].id;
+      map.setFeatureState({ source: "admin-blocks", id: hoveredBlockId }, { hover: true });
+      map.getCanvas().style.cursor = "pointer";
+
+      const p = e.features[0].properties;
+      const popStr = p.population ? Number(p.population).toLocaleString() : "—";
+      adminPopup
+        .setLngLat(e.lngLat)
+        .setHTML(`<strong>${p.block || p.name} Block</strong><br>` +
+                 `<span class="small muted">${p.district} District, ${p.state}</span><br>` +
+                 `Pop: <strong>${popStr}</strong> · Area: ${p.area_sqkm || "—"} km²`)
+        .addTo(map);
+    }
+  });
+
+  map.on("mouseleave", "admin-blocks-fill", () => {
+    if (hoveredBlockId !== null) {
+      map.setFeatureState({ source: "admin-blocks", id: hoveredBlockId }, { hover: false });
+    }
+    hoveredBlockId = null;
+    map.getCanvas().style.cursor = "";
+    adminPopup.remove();
+  });
+
+  // 60-min Projected Storm Tracks and Uncertainty Cones
+  map.addSource("cones", { type: "geojson", data: emptyFC() });
+  map.addLayer({
+    id: "cones-fill", type: "fill", source: "cones",
+    paint: { "fill-color": "#f97316", "fill-opacity": 0.15 },
+  });
+  map.addLayer({
+    id: "cones-line", type: "line", source: "cones",
+    paint: { "line-color": "#f97316", "line-width": 1.2, "line-dasharray": [2, 1] },
+  });
+
+  map.addSource("tracks", { type: "geojson", data: emptyFC() });
+  map.addLayer({
+    id: "tracks-line", type: "line", source: "tracks",
+    paint: { "line-color": "#fbbf24", "line-width": 2, "line-dasharray": [2, 2] },
+  });
+
+  // Multi-Radar Composite Layer
+  map.addSource("radar-mosaic", { type: "image", url: `${API}/radar/mosaic/field.png`, coordinates: DEFAULT_BOX });
+  map.addLayer({
+    id: "radar-mosaic-layer", type: "raster", source: "radar-mosaic",
+    paint: { "raster-opacity": 0.82 },
+    layout: { visibility: "none" },
+  });
+
+  // Radar Range Rings (100 km & 250 km) & Stations
+  map.addSource("radar-rings", { type: "geojson", data: `${API}/radar/rings.geojson` });
+  map.addLayer({
+    id: "radar-rings-line", type: "line", source: "radar-rings",
+    filter: ["==", ["get", "type"], "range_ring"],
+    paint: {
+      "line-color": "#f59e0b",
+      "line-width": 1.2,
+      "line-opacity": 0.65,
+      "line-dasharray": [3, 2],
+    },
+  });
+  map.addLayer({
+    id: "radar-stations-point", type: "circle", source: "radar-rings",
+    filter: ["==", ["get", "type"], "station"],
+    paint: {
+      "circle-radius": 5,
+      "circle-color": "#f59e0b",
+      "circle-stroke-width": 2,
+      "circle-stroke-color": "#ffffff",
+    },
+  });
+
+  map.on("click", "radar-stations-point", (e) => {
+    const p = e.features[0].properties;
+    new maplibregl.Popup()
+      .setLngLat(e.lngLat)
+      .setHTML(`<strong>📡 ${p.name}</strong><br>` +
+               `Band: ${p.band} · Alt: ${p.altitude_m} m<br>` +
+               `Surveillance Range: <strong>250 km</strong> (Quantitative: 100 km)<br>` +
+               `<span style="color:#22c55e;font-weight:600;">Status: ${p.status}</span>`)
+      .addTo(map);
+  });
+  map.on("mouseenter", "radar-stations-point", () => map.getCanvas().style.cursor = "pointer");
+  map.on("mouseleave", "radar-stations-point", () => map.getCanvas().style.cursor = "");
 });
 
 function emptyFC() { return { type: "FeatureCollection", features: [] }; }
 
 function gridToBounds(grid) {
   if (!grid) return [[68, 5], [98, 5], [98, 38], [68, 38]];
-  const halfLat = Math.abs(grid.dlat) / 2, halfLon = grid.dlon / 2;
-  const north = grid.lat0 + halfLat;
-  const south = grid.lat0 + grid.dlat * (grid.nlat - 1) - halfLat;
-  const west = grid.lon0 - halfLon;
-  const east = grid.lon0 + grid.dlon * (grid.nlon - 1) + halfLon;
-  return [[west, north], [east, north], [east, south], [west, south]];
+  const halfLat = Math.abs(grid.dlat) / 2;
+  const halfLon = Math.abs(grid.dlon) / 2;
+  const latTop = grid.dlat < 0 ? grid.lat0 + halfLat : grid.lat0 - halfLat;
+  const latBottom = grid.lat0 + grid.dlat * (grid.nlat - 1) + (grid.dlat < 0 ? -halfLat : halfLat);
+  const lonLeft = grid.lon0 - halfLon;
+  const lonRight = grid.lon0 + (grid.dlon > 0 ? grid.dlon : Math.abs(grid.dlon)) * (grid.nlon - 1) + halfLon;
+  return [[lonLeft, latTop], [lonRight, latTop], [lonRight, latBottom], [lonLeft, latBottom]];
 }
 
 function fitToGrid(grid) {
   const b = gridToBounds(grid);
-  map.fitBounds([[b[3][0], b[2][1]], [b[1][0], b[0][1]]], { padding: 40, duration: 600 });
+  const minLon = Math.min(b[0][0], b[1][0], b[2][0], b[3][0]);
+  const maxLon = Math.max(b[0][0], b[1][0], b[2][0], b[3][0]);
+  const minLat = Math.min(b[0][1], b[1][1], b[2][1], b[3][1]);
+  const maxLat = Math.max(b[0][1], b[1][1], b[2][1], b[3][1]);
+  map.fitBounds([[minLon, minLat], [maxLon, maxLat]], { padding: 40, duration: 600 });
 }
 
 // ---------- api helpers ----------
@@ -215,11 +377,44 @@ function renderStep() {
   map.setLayoutProperty("obs-layer", "visibility",
     $("lyr-obs").checked ? "visible" : "none");
 
-  // cells
+  // cells, projected tracks & uncertainty cones
   const detailP = api(`/forecasts/${f.id}/cells.geojson?lead=${state.lead}`);
   detailP.then((fc) => {
     map.getSource("cells").setData(fc);
-  }).catch(() => map.getSource("cells").setData(emptyFC()));
+
+    const showCones = $("lyr-cones") ? $("lyr-cones").checked : true;
+    if (showCones) {
+      const coneFeats = [];
+      const trackFeats = [];
+      for (const feat of fc.features) {
+        const cone = feat.properties.uncertainty_cone;
+        if (cone && cone.length >= 3) {
+          coneFeats.push({
+            type: "Feature",
+            geometry: { type: "Polygon", coordinates: [cone] },
+            properties: { cell_id: feat.properties.cell_id },
+          });
+        }
+        const trk = feat.properties.projected_track;
+        if (trk && trk.length >= 2) {
+          trackFeats.push({
+            type: "Feature",
+            geometry: { type: "LineString", coordinates: trk },
+            properties: { cell_id: feat.properties.cell_id },
+          });
+        }
+      }
+      map.getSource("cones").setData({ type: "FeatureCollection", features: coneFeats });
+      map.getSource("tracks").setData({ type: "FeatureCollection", features: trackFeats });
+    } else {
+      map.getSource("cones").setData(emptyFC());
+      map.getSource("tracks").setData(emptyFC());
+    }
+  }).catch(() => {
+    map.getSource("cells").setData(emptyFC());
+    map.getSource("cones").setData(emptyFC());
+    map.getSource("tracks").setData(emptyFC());
+  });
 
   // actual flashes in (t, t+lead]
   if (state.flashes && $("lyr-flashes").checked) {
@@ -230,19 +425,66 @@ function renderStep() {
   } else {
     map.getSource("flashes").setData(emptyFC());
   }
+  // Convective initiation candidates
+  const ciOn = $("lyr-ci") ? $("lyr-ci").checked : true;
+  if (ciOn) {
+    api(`/forecasts/${f.id}/ci.geojson`).then((cifc) => {
+      map.getSource("ci-candidates").setData(cifc);
+      map.setLayoutProperty("ci-layer", "visibility", "visible");
+      map.setLayoutProperty("ci-fill", "visibility", "visible");
+    }).catch(() => {
+      map.getSource("ci-candidates").setData(emptyFC());
+    });
+  } else {
+    map.setLayoutProperty("ci-layer", "visibility", "none");
+    map.setLayoutProperty("ci-fill", "visibility", "none");
+  }
+
+  // Uncertainty overlay
+  const uncertOn = $("lyr-uncertainty") ? $("lyr-uncertainty").checked : false;
+  if (uncertOn) {
+    getGridBounds(f.id).then((coords) => {
+      map.getSource("uncertainty-overlay").updateImage({
+        url: `${API}/forecasts/${f.id}/uncertainty.png`,
+        coordinates: coords,
+      });
+      map.setLayoutProperty("uncertainty-layer", "visibility", "visible");
+    }).catch(() => {
+      map.setLayoutProperty("uncertainty-layer", "visibility", "none");
+    });
+  } else {
+    map.setLayoutProperty("uncertainty-layer", "visibility", "none");
+  }
+
   renderAlerts(f);
   loadObsOverlay(f);
 }
 
 async function loadObsOverlay(f) {
-  if (!$("lyr-obs").checked) return;
-  try {
-    const detail = await api(`/forecasts/${f.id}`);
-    const coords = gridToBounds(detail.grid);
-    map.getSource("obs-overlay").updateImage({
-      url: `${API}/forecasts/${f.id}/obs.png`, coordinates: coords,
-    });
-  } catch (_) { /* obs render not available */ }
+  if ($("lyr-obs").checked) {
+    try {
+      const detail = await api(`/forecasts/${f.id}`);
+      const coords = gridToBounds(detail.grid);
+      map.getSource("obs-overlay").updateImage({
+        url: `${API}/forecasts/${f.id}/obs.png`, coordinates: coords,
+      });
+    } catch (_) { /* obs render not available */ }
+  }
+
+  // Multi-Radar Composite Overlay
+  const mosaicOn = $("lyr-radar-mosaic") && $("lyr-radar-mosaic").checked;
+  if (mosaicOn) {
+    try {
+      const coords = await getGridBounds(f.id);
+      map.getSource("radar-mosaic").updateImage({
+        url: `${API}/radar/mosaic/field.png`,
+        coordinates: coords,
+      });
+      map.setLayoutProperty("radar-mosaic-layer", "visibility", "visible");
+    } catch (_) { /* grid bounds unavailable */ }
+  } else {
+    map.setLayoutProperty("radar-mosaic-layer", "visibility", "none");
+  }
 }
 
 function getGridBounds(fid) {
@@ -264,14 +506,19 @@ async function renderAlerts(f) {
   });
   const list = $("alerts-list");
   if (!active.length) { list.innerHTML = '<div class="muted">no alerts in this window</div>'; return; }
-  list.innerHTML = active.slice(-6).reverse().map((a) => `
+  list.innerHTML = active.slice(-6).reverse().map((a) => {
+    const popBadge = a.population_exposed ? `<span class="badge" style="background:#0284c7;color:#fff;margin-left:6px;font-size:10px;padding:2px 6px;border-radius:4px;">👥 ${Number(a.population_exposed).toLocaleString()} exposed</span>` : "";
+    const locHead = a.region_name ? `<div style="font-weight:600;color:#38bdf8;margin:3px 0;">📍 ${a.region_name}</div>` : "";
+    return `
     <div class="alert" data-severity="${a.severity}">
       <div class="head"><span>${a.severity} · ${a.hazard}</span><span class="sev">+${a.lead_minutes}min · P=${a.probability}</span></div>
-      <div class="reason">${a.region_name} — ${a.reason}</div>
+      ${locHead}
+      <div class="reason">${a.reason} ${popBadge}</div>
       <div class="factors">${Object.entries(a.contributing_signals).map(([k, v]) => `${k}=${v}`).join(" · ")}</div>
       <div class="action">▸ ${a.recommended_action}</div>
       <div class="muted small">model ${a.model_version} · mode ${a.mode} · confidence ${a.confidence}</div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
 $("preset-select").onchange = () => renderStep();
 
@@ -325,16 +572,61 @@ function note(msg) { $("cycle-note").textContent = msg; }
   };
 });
 
+if ($("lyr-admin")) {
+  $("lyr-admin").onchange = () => {
+    const vis = $("lyr-admin").checked ? "visible" : "none";
+    if (map.getLayer("admin-districts-line")) map.setLayoutProperty("admin-districts-line", "visibility", vis);
+    if (map.getLayer("admin-blocks-line")) map.setLayoutProperty("admin-blocks-line", "visibility", vis);
+    if (map.getLayer("admin-blocks-fill")) map.setLayoutProperty("admin-blocks-fill", "visibility", vis);
+  };
+}
+
+if ($("lyr-radar-rings")) {
+  $("lyr-radar-rings").onchange = () => {
+    const vis = $("lyr-radar-rings").checked ? "visible" : "none";
+    if (map.getLayer("radar-rings-line")) map.setLayoutProperty("radar-rings-line", "visibility", vis);
+    if (map.getLayer("radar-stations-point")) map.setLayoutProperty("radar-stations-point", "visibility", vis);
+  };
+}
+
+if ($("lyr-radar-mosaic")) {
+  $("lyr-radar-mosaic").onchange = () => renderStep();
+}
+
+if ($("lyr-cones")) {
+  $("lyr-cones").onchange = () => {
+    const vis = $("lyr-cones").checked ? "visible" : "none";
+    if (map.getLayer("cones-fill")) map.setLayoutProperty("cones-fill", "visibility", vis);
+    if (map.getLayer("cones-line")) map.setLayoutProperty("cones-line", "visibility", vis);
+    if (map.getLayer("tracks-line")) map.setLayoutProperty("tracks-line", "visibility", vis);
+  };
+}
+
+if ($("lyr-ci")) {
+  $("lyr-ci").onchange = () => {
+    const vis = $("lyr-ci").checked ? "visible" : "none";
+    if (map.getLayer("ci-layer")) map.setLayoutProperty("ci-layer", "visibility", vis);
+    if (map.getLayer("ci-fill")) map.setLayoutProperty("ci-fill", "visibility", vis);
+  };
+}
+
+if ($("lyr-uncertainty")) {
+  $("lyr-uncertainty").onchange = () => renderStep();
+}
+
 function cellPopup(e) {
   const p = e.features[0].properties;
+  const speed = p.velocity_kmh ? `${p.velocity_kmh} km/h` : `${(+p.motion_dlat).toFixed(3)}/${(+p.motion_dlon).toFixed(3)} °/cycle`;
+  const heading = p.heading_deg ? `${p.heading_deg}°` : "—";
+  const dbz = p.dbz_max ? ` · Max dBZ: <strong>${p.dbz_max}</strong>` : "";
+  const core = p.core_area_km2 ? `<br>Core (≥45 dBZ): <strong>${p.core_area_km2} km²</strong>` : "";
   new maplibregl.Popup()
     .setLngLat([p.centroid_lon ?? e.lngLat.lng, p.centroid_lat ?? e.lngLat.lat])
-    .setHTML(`<strong>Cell ${p.cell_id}</strong><br>
-       max intensity (raw): ${p.max_intensity}<br>
-       area: ${p.area_px} px · age: ${p.track_age} steps<br>
-       motion: ${(+p.motion_dlat).toFixed(3)}/${(+p.motion_dlon).toFixed(3)} °/cycle<br>
-       flash history: ${p.flash_history}<br>
-       <span class="muted">geolocation: ${p.geo_note}</span>`)
+    .setHTML(`<strong>⚡ Storm Cell ${p.cell_id}</strong><br>
+       Speed: <strong>${speed}</strong> · Heading: <strong>${heading}</strong>${dbz}<br>
+       Area: ${p.area_px} px · Age: ${p.track_age} steps${core}<br>
+       Flash history: ${p.flash_history} flashes<br>
+       <span class="muted small">geolocation: ${p.geo_note}</span>`)
     .addTo(map);
 }
 

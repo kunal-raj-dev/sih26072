@@ -77,3 +77,12 @@ earthdata:
   # environment variables — keep this section empty in git.
   username: ""
   password: ""
+
+mosdac:
+  # ISRO MOSDAC credentials (INSAT-3D/3DR/3DS). Credentials come ONLY from the
+  # git-ignored .env (MOSDAC_USERNAME / MOSDAC_PASSWORD) or VAJRA_MOSDAC__*
+  # environment variables — keep this section empty in git.
+  username: ""
+  password: ""
+  host: "www.mosdac.gov.in"
+

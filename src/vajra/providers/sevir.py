@@ -47,11 +47,13 @@ logger = get_logger("vajra.providers.sevir")
 S3_BUCKET = "sevir"
 REGION = "us-east-1"
 CATALOG_KEY = "CATALOG.csv"
+from ..qc import sevir_ir_to_kelvin
+
 # SEVIR VIL is stored as uint8 on the raw SEVIR scale (0-255). Published SEVIR
 # nowcasting work uses raw-scale thresholds (16/74/133/...); we follow that
 # convention and never claim physical VIL units.
 VIL_UNITS = "SEVIR VIL raw scale (0-255)"
-IR107_UNITS = "SEVIR IR107 raw scale (brightness-temperature derived, uncalibrated here)"
+IR107_UNITS = "Kelvin (calibrated from SEVIR raw scale)"
 
 
 def _fs() -> s3fs.S3FileSystem:
@@ -257,7 +259,8 @@ class SevirReplayEvent:
                                 time=ft, grid=gm, mode=DataMode.REPLAY,
                                 quality=QualityInfo(status=QualityStatus.OK),
                                 note=f"SEVIR event {self.event_id} frame {k}")
-            out.append(ObsFrame(meta, field=arr[k].astype(np.float32)))
+            field_val = sevir_ir_to_kelvin(arr[k]) if kind == "ir107" else arr[k].astype(np.float32)
+            out.append(ObsFrame(meta, field=field_val))
         return out
 
     def lightning_frames(self, t: datetime, minutes: int) -> list[ObsFrame]:

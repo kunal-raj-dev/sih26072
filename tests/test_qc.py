@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 
 from vajra.grid import india_grid
-from vajra.qc import modality_health, validate_frame
+from vajra.qc import get_range_rule, modality_health, sevir_ir_to_kelvin, validate_frame
 from vajra.schemas import DataMode, GridMeta, Modality, ObsFrame, ObsFrameMeta, QualityInfo, QualityStatus
 
 
@@ -71,3 +71,71 @@ def test_modality_health_aggregation():
     assert modality_health([ok, all_missing]) == "SUSPECT"  # degraded, not absent
     assert modality_health([all_missing]) == "MISSING"
     assert modality_health([]) == "MISSING"
+
+
+def test_source_aware_range_rules():
+    assert get_range_rule("sevir", "bt_ir107") == (150.0, 350.0)
+    assert get_range_rule("sevir_raw_ir", "bt_ir107") == (0.0, 255.0)
+    assert get_range_rule("imerg", "precipitation") == (0.0, 500.0)
+    assert get_range_rule("unknown_source", "vil") == (0.0, 255.0)
+    assert get_range_rule("unknown_source", "unknown_var") == (-np.inf, np.inf)
+
+
+def test_sevir_ir_to_kelvin_uint8():
+    assert abs(sevir_ir_to_kelvin(0.0) - 150.0) < 1e-4
+    assert abs(sevir_ir_to_kelvin(255.0) - 350.0) < 1e-4
+    mid = sevir_ir_to_kelvin(128.0)
+    assert 245.0 < mid < 255.0
+
+
+def test_sevir_ir_to_kelvin_int16():
+    # Cold overshooting top: -70.97 C -> 202.18 K
+    k_cold = sevir_ir_to_kelvin(-7097)
+    assert abs(k_cold - 202.18) < 0.05
+    # Warm surface: +21.83 C -> 294.98 K
+    k_warm = sevir_ir_to_kelvin(2183)
+    assert abs(k_warm - 294.98) < 0.05
+    # Array conversion
+    arr = np.array([-7097, -3762, 2183], dtype=np.int16)
+    k_arr = sevir_ir_to_kelvin(arr)
+    assert k_arr.shape == (3,)
+    assert 200.0 < k_arr[0] < 205.0
+    assert 230.0 < k_arr[1] < 240.0
+    assert 290.0 < k_arr[2] < 300.0
+
+
+def test_sevir_ir_frame_passes_qc_cleanly():
+    # Simulated SEVIR IR frame after Kelvin conversion (e.g. 210 K to 290 K)
+    field = np.linspace(210.0, 290.0, 25, dtype=np.float32).reshape(5, 5)
+    f = ObsFrame(meta(variable="bt_ir107"), field=field)
+    f.meta.source = "sevir"
+    f.meta.units = "Kelvin"
+    out = validate_frame(f)
+    assert out.meta.quality.status == QualityStatus.OK
+    assert "outside" not in out.meta.quality.message
+
+
+def test_sevir_raw_ir_rules():
+    field = np.linspace(10.0, 240.0, 25, dtype=np.float32).reshape(5, 5)
+    f = ObsFrame(meta(variable="bt_ir107"), field=field)
+    f.meta.source = "sevir_raw_ir"
+    out = validate_frame(f)
+    assert out.meta.quality.status == QualityStatus.OK
+    assert "outside" not in out.meta.quality.message
+
+
+def test_ir_out_of_physical_range_flagged():
+    # 100 K is unphysically cold (< 150 K)
+    f_cold = ObsFrame(meta(variable="bt_ir107"), field=np.full((5, 5), 100.0))
+    f_cold.meta.source = "sevir"
+    out = validate_frame(f_cold)
+    assert out.meta.quality.status == QualityStatus.SUSPECT
+    assert "outside" in out.meta.quality.message
+
+    # 400 K is unphysically hot (> 350 K)
+    f_hot = ObsFrame(meta(variable="bt_ir107"), field=np.full((5, 5), 400.0))
+    f_hot.meta.source = "sevir"
+    out = validate_frame(f_hot)
+    assert out.meta.quality.status == QualityStatus.SUSPECT
+    assert "outside" in out.meta.quality.message
+

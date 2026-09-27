@@ -85,3 +85,31 @@ def _window_mean(a: np.ndarray, w: int) -> np.ndarray:
     h, hh = a.shape[0] // w, a.shape[1] // w
     a = a[: h * w, : hh * w]
     return a.reshape(h, w, hh, w).mean(axis=(1, 3))
+
+
+def fss_neighborhood(
+    p_fc: np.ndarray,
+    p_obs: np.ndarray,
+    threshold: float = 0.35,
+    window_size: int = 5,
+) -> float:
+    """Fractions Skill Score (FSS) per Roberts & Lean (2008) with continuous sliding window.
+
+    Evaluates spatial forecast skill over physical neighborhood scales (e.g., window_size=3 is ~30 km,
+    window_size=5 is ~50 km on 0.1 deg grid).
+    """
+    import scipy.ndimage as ndi
+
+    fc_bin = (np.asarray(p_fc, dtype=float) >= threshold).astype(float)
+    obs_bin = (np.asarray(p_obs, dtype=float) >= threshold).astype(float)
+
+    # Local event fractions using 2D sliding uniform filter
+    fc_frac = ndi.uniform_filter(fc_bin, size=window_size, mode="constant", cval=0.0)
+    obs_frac = ndi.uniform_filter(obs_bin, size=window_size, mode="constant", cval=0.0)
+
+    mse = float(np.mean((fc_frac - obs_frac) ** 2))
+    mse_ref = float(np.mean(fc_frac ** 2 + obs_frac ** 2))
+
+    if mse_ref == 0.0:
+        return 1.0 if np.all(fc_bin == obs_bin) else 0.0
+    return float(np.clip(1.0 - (mse / mse_ref), 0.0, 1.0))

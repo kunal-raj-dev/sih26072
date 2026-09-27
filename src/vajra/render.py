@@ -59,3 +59,57 @@ def render_field_png(field: np.ndarray, vmin: float, vmax: float) -> bytes:
     buf = io.BytesIO()
     Image.fromarray(rgba, "RGBA").save(buf, format="PNG")
     return buf.getvalue()
+
+
+# Standard meteorological radar reflectivity color scale (WSR-88D / IMD NWS color ramp)
+REFLECTIVITY_COLORS: list[tuple[float, tuple[int, int, int, int]]] = [
+    (5.0,  (100, 181, 246, 120)),  # Light blue - drizzle / light echo
+    (15.0, (30, 136, 229, 140)),   # Blue - light rain
+    (25.0, (67, 160, 71, 160)),    # Green - moderate rain
+    (35.0, (124, 179, 66, 180)),   # Yellow-green - heavy stratiform
+    (40.0, (253, 216, 53, 200)),   # Yellow - heavy rain / convective onset
+    (45.0, (251, 140, 0, 215)),    # Amber/Orange - intense convective core
+    (50.0, (229, 57, 53, 230)),    # Red - severe storm core
+    (55.0, (183, 28, 28, 240)),    # Dark Red - severe storm with hail risk
+    (60.0, (216, 27, 96, 250)),    # Magenta - destructive hail probable
+    (65.0, (142, 36, 170, 255)),   # Purple/Violet - extreme convective cell
+]
+
+
+def render_reflectivity_png(dbz_grid: np.ndarray) -> bytes:
+    """Render a 2D radar reflectivity grid (dBZ) with standard meteorological colors."""
+    dbz = np.nan_to_num(dbz_grid.astype(float), nan=0.0)
+    h, w = dbz.shape
+    img = np.zeros((h, w, 4), dtype=np.uint8)
+
+    for thresh, (r, g, b, a) in REFLECTIVITY_COLORS:
+        sel = dbz >= thresh
+        img[sel] = (r, g, b, a)
+
+    buf = io.BytesIO()
+    Image.fromarray(img, "RGBA").save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def render_uncertainty_png(sigma_grid: np.ndarray) -> bytes:
+    """Render a 2D spatial uncertainty field as an amber/cyan semi-transparent overlay."""
+    sig = np.clip(np.nan_to_num(sigma_grid.astype(float), nan=0.0), 0.0, 1.0)
+    h, w = sig.shape
+    img = np.zeros((h, w, 4), dtype=np.uint8)
+
+    # Low uncertainty (< 0.25): transparent to subtle teal
+    # Medium uncertainty (0.25 - 0.60): cyan / blue
+    # High uncertainty (> 0.60): warm amber / magenta
+    r = (np.clip((sig - 0.20) / 0.80, 0, 1) * 220).astype(np.uint8)
+    g = (np.clip((1.0 - np.abs(sig - 0.50) * 2.0), 0, 1) * 180).astype(np.uint8)
+    b = (np.clip((0.80 - sig) / 0.80, 0, 1) * 240).astype(np.uint8)
+    a = (np.clip((sig - 0.10) / 0.90, 0, 1) * 160).astype(np.uint8)
+
+    img[:, :, 0] = r
+    img[:, :, 1] = g
+    img[:, :, 2] = b
+    img[:, :, 3] = a
+
+    buf = io.BytesIO()
+    Image.fromarray(img, "RGBA").save(buf, format="PNG")
+    return buf.getvalue()

@@ -11,7 +11,7 @@ desktop.ini
 
 # --- Build/runtime artifacts ---
 store/
-models/
+/models/
 *.log
 
 # --- Secrets & environment ---

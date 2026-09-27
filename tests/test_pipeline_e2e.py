@@ -13,7 +13,7 @@ import numpy as np
 from vajra.models import (AdvectionModel, ClimatologyModel, LightningJumpModel,
                           ModelRouter, PersistenceModel)
 from vajra.pipeline import NowcastPipeline
-from vajra.schemas import DataMode, Event, FallbackRung
+from vajra.schemas import DataMode, Event, FallbackRung, Modality
 from vajra.store import Store
 
 
@@ -103,3 +103,82 @@ def test_alert_suppression_within_window(settings, synthetic_sources, bihar_even
         keys1 = {(a.region_name, a.severity, a.preset) for a in a1}
         keys2 = {(a.region_name, a.severity, a.preset) for a in a2}
         assert not (keys1 & keys2), "suppression failed"
+
+
+def test_pipeline_consumes_surface_precipitation_frames(settings, synthetic_sources, bihar_event):
+    from vajra.grid import india_grid
+    from vajra.schemas import GridMeta, ObsFrame, ObsFrameMeta, QualityInfo, QualityStatus
+
+    g = india_grid(0.1)
+    gm = GridMeta(name=g.name, lat0=g.lat0, lon0=g.lon0, dlat=g.dlat, dlon=g.dlon, nlat=g.nlat, nlon=g.nlon)
+    rain_field = np.zeros((g.nlat, g.nlon), dtype=np.float32)
+    # 25 mm/hr rain core
+    rain_field[100:150, 150:200] = 25.0
+    t = bihar_event.start + timedelta(minutes=30)
+    meta = ObsFrameMeta(
+        source="imerg", modality=Modality.SURFACE, variable="precipitation", units="mm/hr",
+        time=t, grid=gm, mode=DataMode.SIMULATION,
+        quality=QualityInfo(status=QualityStatus.OK)
+    )
+    surface_frame = ObsFrame(meta, field=rain_field)
+
+    class MockSurfaceProvider:
+        name = "imerg"
+        modality = Modality.SURFACE
+        mode = DataMode.SIMULATION
+
+        def get_history(self, req_t, minutes):
+            return [surface_frame]
+
+        def health(self):
+            return None
+
+    sources = dict(synthetic_sources)
+    sources[Modality.SURFACE] = MockSurfaceProvider()
+
+    pipe = _pipeline(settings, sources)
+    fc, alerts = pipe.run_cycle(t, "SIM_BIHAR_001", DataMode.SIMULATION)
+    assert fc.data_quality["surface"] == "OK"
+    assert Modality.SURFACE in fc.modalities_used
+
+
+def test_precipitation_as_radar_proxy_when_radar_and_satellite_absent(settings, bihar_event):
+    from vajra.grid import india_grid
+    from vajra.schemas import GridMeta, ObsFrame, ObsFrameMeta, QualityInfo, QualityStatus
+
+    g = india_grid(0.1)
+    gm = GridMeta(name=g.name, lat0=g.lat0, lon0=g.lon0, dlat=g.dlat, dlon=g.dlon, nlat=g.nlat, nlon=g.nlon)
+    rain_field = np.zeros((g.nlat, g.nlon), dtype=np.float32)
+    rain_field[120:130, 180:190] = 45.0  # Intense rain core
+    t = bihar_event.start + timedelta(minutes=30)
+    meta = ObsFrameMeta(
+        source="imerg", modality=Modality.SURFACE, variable="precipitation", units="mm/hr",
+        time=t, grid=gm, mode=DataMode.SIMULATION,
+        quality=QualityInfo(status=QualityStatus.OK)
+    )
+    surface_frame = ObsFrame(meta, field=rain_field)
+
+    sources = {
+        Modality.SURFACE: type("P", (), {
+            "get_history": lambda self, req_t, minutes: [surface_frame],
+            "health": lambda self: None, "name": "imerg", "modality": Modality.SURFACE, "mode": DataMode.SIMULATION
+        })(),
+        Modality.RADAR: type("D", (), {
+            "get_history": lambda self, req_t, minutes: [],
+            "health": lambda self: None, "name": "dead", "modality": Modality.RADAR, "mode": DataMode.UNAVAILABLE
+        })(),
+        Modality.SATELLITE: type("D", (), {
+            "get_history": lambda self, req_t, minutes: [],
+            "health": lambda self: None, "name": "dead", "modality": Modality.SATELLITE, "mode": DataMode.UNAVAILABLE
+        })(),
+        Modality.LIGHTNING: type("D", (), {
+            "get_history": lambda self, req_t, minutes: [],
+            "health": lambda self: None, "name": "dead", "modality": Modality.LIGHTNING, "mode": DataMode.UNAVAILABLE
+        })(),
+    }
+    pipe = _pipeline(settings, sources)
+    fc, alerts = pipe.run_cycle(t, "SIM_BIHAR_001", DataMode.SIMULATION)
+    assert any("precipitation proxy" in n.lower() for n in fc.notes)
+    assert fc.data_quality["surface"] == "OK"
+    assert Modality.SURFACE in fc.modalities_used
+
