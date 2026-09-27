@@ -24,7 +24,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-import h5py
+try:
+    import h5py
+except ImportError:
+    h5py = None
 import numpy as np
 
 from ..config import Settings

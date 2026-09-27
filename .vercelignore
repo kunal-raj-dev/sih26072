@@ -1,0 +1,16 @@
+.venv/
+tests/
+docs/
+scripts/
+data/external/
+data/processed/
+models/unet_spatiotemporal/
+*.pt
+*.h5
+*.nc
+*.grib*
+*.png
+*.gif
+*.log
+docker-compose.yml
+Dockerfile

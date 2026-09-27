@@ -21,10 +21,18 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import h5py
+try:
+    import h5py
+except ImportError:
+    h5py = None
+
 import numpy as np
 import pandas as pd
-import s3fs
+
+try:
+    import s3fs
+except ImportError:
+    s3fs = None
 
 from ..config import Settings
 from ..grid import GridSpec
