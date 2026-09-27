@@ -92,6 +92,9 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
 
     # ---- health ------------------------------------------------------------
     @app.get("/api/v1/health")
+    @app.get("/api/health")
+    @app.get("/health")
+    @app.get("/healthz")
     def health() -> dict:
         return {"status": "ok", "time": datetime.now(timezone.utc).isoformat(), "version": app.version}
 

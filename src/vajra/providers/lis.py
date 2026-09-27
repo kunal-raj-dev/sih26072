@@ -320,7 +320,10 @@ class LisProvider(AtmosphericDataProvider):
         self.timeout_s = timeout_s
         self.grid = make_india_grid()
         self.cache_dir = settings.data_root / "external" / "lis"
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
 
         self._last_success: datetime | None = None
         self._history_flashes: list[np.ndarray] = []  # List of (N, 4) arrays

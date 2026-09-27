@@ -589,7 +589,10 @@ class GfsNomadsProvider(AtmosphericDataProvider):
         self.timeout_s = timeout_s
         self.grid = make_india_grid()
         self.cache_dir = self.settings.data_root / "external" / "gfs"
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
 
         self._last_success: datetime | None = None
         self._history_frames: dict[datetime, dict[str, np.ndarray]] = {}

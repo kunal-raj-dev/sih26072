@@ -92,7 +92,10 @@ class SevirEventBundle:
 class SevirCatalog:
     def __init__(self, cache_dir: Path):
         self.cache = cache_dir
-        self.cache.mkdir(parents=True, exist_ok=True)
+        try:
+            self.cache.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
         self.path = self.cache / "CATALOG.csv"
         if not self.path.exists():
             log_event(logger, 20, "downloading SEVIR catalog", size_mb=33.8)
@@ -128,7 +131,10 @@ class SevirReplayEvent:
         self.settings = settings
         self.catalog = catalog or SevirCatalog(settings.data_root / "external" / "sevir")
         self.cache_dir = settings.data_root / "external" / "sevir" / "events"
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
         self.bundle: SevirEventBundle | None = None
 
     # ---- preparation (network) --------------------------------------------

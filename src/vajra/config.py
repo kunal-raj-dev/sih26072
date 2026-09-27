@@ -216,6 +216,13 @@ class Settings:
 
     @property
     def data_root(self) -> Path:
+        if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+            tmp_data = Path(os.environ.get("VAJRA_PATHS__DATA_ROOT", "/tmp/vajra/data"))
+            try:
+                tmp_data.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                pass
+            return tmp_data
         return (REPO_ROOT / self.paths.data_root).resolve()
 
     @property

@@ -73,7 +73,10 @@ class ImergProvider(AtmosphericDataProvider):
         self._last_success: datetime | None = None
         self._last_error = "" if settings.earthdata.configured else "Earthdata credentials not configured (.env: EARTHDATA_USERNAME/PASSWORD)"
         self.cache = settings.data_root / "external" / "imerg"
-        self.cache.mkdir(parents=True, exist_ok=True)
+        try:
+            self.cache.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
 
     # ---- auth ---------------------------------------------------------------
     def _http(self) -> httpx.Client:

@@ -169,6 +169,66 @@ ADMIN_HIERARCHY = {
                 ("Bikramganj", 84.26, 25.20, 0.09, 270000, 1203),
             ],
         },
+        "Jehanabad": {
+            "headquarters": "Jehanabad",
+            "population": 1125313,
+            "blocks": [
+                ("Jehanabad Sadar", 84.99, 25.21, 0.09, 290000, 1251),
+                ("Kako", 84.90, 25.26, 0.08, 210000, 1252),
+                ("Ghoshi", 85.10, 25.16, 0.08, 200000, 1253),
+            ],
+        },
+        "Arwal": {
+            "headquarters": "Arwal",
+            "population": 587299,
+            "blocks": [
+                ("Arwal Sadar", 84.68, 25.08, 0.09, 180000, 1261),
+                ("Kurtha", 84.75, 25.05, 0.08, 150000, 1262),
+            ],
+        },
+        "Nawada": {
+            "headquarters": "Nawada",
+            "population": 2219641,
+            "blocks": [
+                ("Nawada Sadar", 85.54, 24.89, 0.09, 310000, 1271),
+                ("Warsaliganj", 85.42, 24.97, 0.09, 240000, 1272),
+                ("Hisua", 85.38, 24.80, 0.09, 220000, 1273),
+                ("Akbarpur", 85.65, 24.96, 0.09, 230000, 1274),
+            ],
+        },
+        "Sheikhpura": {
+            "headquarters": "Sheikhpura",
+            "population": 634743,
+            "blocks": [
+                ("Sheikhpura Sadar", 85.85, 25.14, 0.09, 190000, 1281),
+                ("Barbigha", 85.75, 25.02, 0.08, 160000, 1282),
+            ],
+        },
+        "Jamui": {
+            "headquarters": "Jamui",
+            "population": 1760402,
+            "blocks": [
+                ("Jamui Sadar", 86.22, 24.92, 0.09, 260000, 1291),
+                ("Jhajha", 86.38, 24.75, 0.10, 220000, 1292),
+                ("Chakai", 86.48, 24.62, 0.10, 180000, 1293),
+            ],
+        },
+        "Lakhisarai": {
+            "headquarters": "Lakhisarai",
+            "population": 1000687,
+            "blocks": [
+                ("Lakhisarai Sadar", 86.09, 25.17, 0.09, 190000, 1321),
+                ("Barahiya", 86.06, 25.28, 0.08, 170000, 1322),
+            ],
+        },
+        "Munger": {
+            "headquarters": "Munger",
+            "population": 1367765,
+            "blocks": [
+                ("Munger Sadar", 86.47, 25.39, 0.09, 260000, 1331),
+                ("Jamalpur", 86.34, 25.31, 0.09, 230000, 1332),
+            ],
+        },
     },
     "Uttar Pradesh": {
         "Varanasi": {
@@ -229,6 +289,151 @@ ADMIN_HIERARCHY = {
             "blocks": [
                 ("Cuttack Sadar", 85.88, 20.46, 0.09, 580000, 1901),
                 ("Salepur", 85.99, 20.48, 0.08, 260000, 1902),
+            ],
+        },
+        "Jagatsinghpur": {
+            "headquarters": "Jagatsinghpur",
+            "population": 1136971,
+            "blocks": [
+                ("Jagatsinghpur Sadar", 86.17, 20.26, 0.09, 310000, 1951),
+                ("Tirtol", 86.05, 20.36, 0.09, 270000, 1952),
+            ],
+        },
+        "Puri": {
+            "headquarters": "Puri",
+            "population": 1697983,
+            "blocks": [
+                ("Puri Sadar", 85.83, 19.81, 0.09, 380000, 1961),
+                ("Pipili", 85.83, 20.02, 0.08, 260000, 1962),
+                ("Nimapada", 85.98, 20.06, 0.09, 240000, 1963),
+            ],
+        },
+    },
+    "Jharkhand": {
+        "Hazaribagh": {
+            "headquarters": "Hazaribagh",
+            "population": 1734095,
+            "blocks": [
+                ("Hazaribagh Sadar", 85.36, 23.99, 0.09, 300000, 2101),
+                ("Barkagaon", 85.23, 23.83, 0.09, 220000, 2102),
+                ("Ichak", 85.50, 24.05, 0.08, 190000, 2103),
+            ],
+        },
+        "Ramgarh": {
+            "headquarters": "Ramgarh",
+            "population": 950461,
+            "blocks": [
+                ("Ramgarh Sadar", 85.52, 23.63, 0.09, 220000, 2111),
+                ("Gola", 85.62, 23.72, 0.08, 170000, 2112),
+            ],
+        },
+        "Koderma": {
+            "headquarters": "Jhumri Telaiya",
+            "population": 716259,
+            "blocks": [
+                ("Koderma Sadar", 85.63, 24.43, 0.09, 180000, 2121),
+                ("Domchanch", 85.44, 24.51, 0.08, 150000, 2122),
+            ],
+        },
+        "Giridih": {
+            "headquarters": "Giridih",
+            "population": 2445474,
+            "blocks": [
+                ("Giridih Sadar", 86.30, 24.18, 0.09, 320000, 2131),
+                ("Dumri", 86.05, 24.05, 0.09, 240000, 2132),
+                ("Bengabad", 86.10, 24.28, 0.09, 230000, 2133),
+            ],
+        },
+        "Bokaro": {
+            "headquarters": "Bokaro Steel City",
+            "population": 2062262,
+            "blocks": [
+                ("Bokaro Steel City", 86.15, 23.67, 0.08, 340000, 2141),
+                ("Chas", 86.13, 23.60, 0.08, 280000, 2142),
+                ("Gomia", 85.85, 23.80, 0.09, 210000, 2143),
+            ],
+        },
+        "Dhanbad": {
+            "headquarters": "Dhanbad",
+            "population": 2684483,
+            "blocks": [
+                ("Dhanbad Sadar", 86.44, 23.80, 0.09, 380000, 2151),
+                ("Jharia", 86.42, 23.73, 0.08, 290000, 2152),
+                ("Nirsa", 86.70, 23.68, 0.09, 230000, 2153),
+            ],
+        },
+        "Deoghar": {
+            "headquarters": "Deoghar",
+            "population": 1492073,
+            "blocks": [
+                ("Deoghar Sadar", 86.70, 24.48, 0.09, 260000, 2161),
+                ("Madhupur", 86.83, 24.65, 0.09, 210000, 2162),
+            ],
+        },
+        "Ranchi": {
+            "headquarters": "Ranchi",
+            "population": 2914253,
+            "blocks": [
+                ("Ranchi Sadar", 85.31, 23.34, 0.09, 420000, 2171),
+                ("Namkum", 85.35, 23.27, 0.08, 290000, 2172),
+                ("Bundu", 85.48, 23.25, 0.08, 220000, 2173),
+            ],
+        },
+    },
+    "Andhra Pradesh": {
+        "Visakhapatnam": {
+            "headquarters": "Visakhapatnam",
+            "population": 4420146,
+            "blocks": [
+                ("Visakhapatnam Urban", 83.22, 17.69, 0.09, 720000, 2201),
+                ("Anakapalli", 83.00, 17.59, 0.09, 310000, 2202),
+                ("Bheemili", 83.31, 17.79, 0.08, 240000, 2203),
+            ],
+        },
+        "Vizianagaram": {
+            "headquarters": "Vizianagaram",
+            "population": 2330000,
+            "blocks": [
+                ("Vizianagaram Sadar", 83.41, 18.11, 0.09, 320000, 2211),
+                ("Nellimarla", 83.35, 18.20, 0.08, 220000, 2212),
+            ],
+        },
+    },
+    "Himachal Pradesh": {
+        "Shimla": {
+            "headquarters": "Shimla",
+            "population": 814010,
+            "blocks": [
+                ("Shimla Urban", 77.17, 31.10, 0.08, 240000, 2301),
+                ("Shimla Rural", 77.05, 31.03, 0.09, 160000, 2302),
+                ("Theog", 77.37, 31.24, 0.09, 120000, 2303),
+            ],
+        },
+        "Solan": {
+            "headquarters": "Solan",
+            "population": 676318,
+            "blocks": [
+                ("Solan Sadar", 77.10, 30.90, 0.09, 190000, 2311),
+                ("Arki", 76.98, 31.15, 0.09, 140000, 2312),
+            ],
+        },
+        "Kinnaur": {
+            "headquarters": "Reckong Peo",
+            "population": 84671,
+            "blocks": [
+                ("Reckong Peo", 78.27, 31.53, 0.08, 22000, 2321),
+                ("Nichar", 78.00, 31.40, 0.09, 18000, 2322),
+            ],
+        },
+    },
+    "Uttarakhand": {
+        "Uttarkashi": {
+            "headquarters": "Uttarkashi",
+            "population": 330086,
+            "blocks": [
+                ("Uttarkashi Sadar", 78.44, 30.73, 0.09, 95000, 2401),
+                ("Bhatwari", 78.60, 30.80, 0.09, 70000, 2402),
+                ("Dunda", 78.25, 30.80, 0.08, 60000, 2403),
             ],
         },
     },

@@ -507,8 +507,11 @@ class MosdacProvider(AtmosphericDataProvider):
         self.grid = make_india_grid()
         self.cache_dir = settings.data_root / "external" / "mosdac"
         self.processed_dir = settings.data_root / "processed" / "insat"
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.processed_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            self.processed_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
 
         self._last_success: datetime | None = None
         self._last_error = "" if settings.mosdac.configured else (
