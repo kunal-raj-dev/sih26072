@@ -55,15 +55,21 @@ class VercelPathNormalizer:
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http":
             orig_path = scope.get("path", "")
-            headers = dict(scope.get("headers", []))
+            raw_qs = scope.get("query_string", b"").decode("utf-8", "ignore")
 
-            # Headers provided by Vercel proxy
-            forwarded_uri = headers.get(b"x-forwarded-uri", b"").decode("utf-8", "ignore")
-            matched_path = headers.get(b"x-matched-path", b"").decode("utf-8", "ignore")
+            import urllib.parse
+            params = urllib.parse.parse_qs(raw_qs, keep_blank_values=True)
 
             target_path = orig_path
-            # If Vercel rewrote the destination to /api/index.py, restore original URI
-            if target_path in ("/api/index.py", "/index.py", "/api", "/api/"):
+            if "vajra_path" in params:
+                target_path = params.pop("vajra_path")[0]
+                # Rebuild query string without vajra_path so FastAPI endpoints stay clean
+                new_qs = urllib.parse.urlencode([(k, v) for k, vs in params.items() for v in vs])
+                scope["query_string"] = new_qs.encode("utf-8")
+            elif target_path in ("/api/index.py", "/index.py", "/api", "/api/"):
+                headers = dict(scope.get("headers", []))
+                forwarded_uri = headers.get(b"x-forwarded-uri", b"").decode("utf-8", "ignore")
+                matched_path = headers.get(b"x-matched-path", b"").decode("utf-8", "ignore")
                 if forwarded_uri:
                     target_path = forwarded_uri.split("?")[0]
                 elif matched_path and not matched_path.endswith(".py"):

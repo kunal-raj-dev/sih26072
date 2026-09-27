@@ -4,19 +4,19 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api/index.py"
+      "destination": "/api/index.py?vajra_path=/api/$1"
     },
     {
       "source": "/docs",
-      "destination": "/api/index.py"
+      "destination": "/api/index.py?vajra_path=/docs"
     },
     {
       "source": "/openapi.json",
-      "destination": "/api/index.py"
+      "destination": "/api/index.py?vajra_path=/openapi.json"
     },
     {
       "source": "/healthz",
-      "destination": "/api/index.py"
+      "destination": "/api/index.py?vajra_path=/healthz"
     }
   ],
   "functions": {
