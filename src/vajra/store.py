@@ -57,10 +57,12 @@ class Store:
             self.artifacts.mkdir(exist_ok=True)
         except OSError:
             pass
-        self._lock = threading.Lock()
-        self._conn = sqlite3.connect(self.dir / "vajra.db", check_same_thread=False)
+        self._lock = threading.RLock()
+        self._conn = sqlite3.connect(self.dir / "vajra.db", check_same_thread=False, timeout=30.0)
         self._conn.row_factory = sqlite3.Row
         with self._lock:
+            self._conn.execute("PRAGMA journal_mode=WAL;")
+            self._conn.execute("PRAGMA busy_timeout=5000;")
             self._conn.executescript(SCHEMA)
             self._conn.commit()
 
@@ -73,12 +75,14 @@ class Store:
             self._conn.commit()
 
     def get_event(self, event_id: str) -> Event | None:
-        row = self._conn.execute("SELECT json FROM events WHERE id=?", (event_id,)).fetchone()
-        return Event.model_validate_json(row["json"]) if row else None
+        with self._lock:
+            row = self._conn.execute("SELECT json FROM events WHERE id=?", (event_id,)).fetchone()
+            return Event.model_validate_json(row["json"]) if row else None
 
     def list_events(self) -> list[Event]:
-        rows = self._conn.execute("SELECT json FROM events ORDER BY created_at DESC").fetchall()
-        return [Event.model_validate_json(r["json"]) for r in rows]
+        with self._lock:
+            rows = self._conn.execute("SELECT json FROM events ORDER BY created_at DESC").fetchall()
+            return [Event.model_validate_json(r["json"]) for r in rows]
 
     # -- runs -------------------------------------------------------------------
     def put_run(self, run: InferenceRun) -> None:
@@ -92,18 +96,30 @@ class Store:
             self._conn.commit()
 
     def get_run(self, run_id: str) -> InferenceRun | None:
-        row = self._conn.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
-        if not row:
-            return None
-        return InferenceRun(
-            id=row["id"], event_id=row["event_id"],
-            started_at=datetime.fromisoformat(row["started_at"]),
-            finished_at=datetime.fromisoformat(row["finished_at"]) if row["finished_at"] else None,
-            cycles=row["cycles"], metrics=json.loads(row["metrics"] or "{}"))
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
+            if not row:
+                return None
+            return InferenceRun(
+                id=row["id"], event_id=row["event_id"],
+                started_at=datetime.fromisoformat(row["started_at"]),
+                finished_at=datetime.fromisoformat(row["finished_at"]) if row["finished_at"] else None,
+                cycles=row["cycles"], metrics=json.loads(row["metrics"] or "{}"))
 
     def list_runs(self) -> list[InferenceRun]:
-        rows = self._conn.execute("SELECT id FROM runs ORDER BY started_at DESC").fetchall()
-        return [r for r in (self.get_run(row["id"]) for row in rows) if r]
+        with self._lock:
+            rows = self._conn.execute("SELECT * FROM runs ORDER BY started_at DESC").fetchall()
+            runs = []
+            for row in rows:
+                try:
+                    runs.append(InferenceRun(
+                        id=row["id"], event_id=row["event_id"],
+                        started_at=datetime.fromisoformat(row["started_at"]),
+                        finished_at=datetime.fromisoformat(row["finished_at"]) if row["finished_at"] else None,
+                        cycles=row["cycles"], metrics=json.loads(row["metrics"] or "{}")))
+                except Exception:
+                    continue
+            return runs
 
     # -- forecasts ---------------------------------------------------------------
     def put_forecast(self, forecast: Forecast, fields: dict[int, tuple[np.ndarray, bytes]],
@@ -140,8 +156,9 @@ class Store:
             self._conn.commit()
 
     def get_forecast(self, forecast_id: str) -> Forecast | None:
-        row = self._conn.execute("SELECT json FROM forecasts WHERE id=?", (forecast_id,)).fetchone()
-        return Forecast.model_validate_json(row["json"]) if row else None
+        with self._lock:
+            row = self._conn.execute("SELECT json FROM forecasts WHERE id=?", (forecast_id,)).fetchone()
+            return Forecast.model_validate_json(row["json"]) if row else None
 
     def list_forecasts(self, run_id: str | None = None, event_id: str | None = None) -> list[Forecast]:
         q = "SELECT json FROM forecasts"
@@ -153,14 +170,16 @@ class Store:
         if conds:
             q += " WHERE " + " AND ".join(conds)
         q += " ORDER BY replay_time"
-        rows = self._conn.execute(q, args).fetchall()
-        return [Forecast.model_validate_json(r["json"]) for r in rows]
+        with self._lock:
+            rows = self._conn.execute(q, args).fetchall()
+            return [Forecast.model_validate_json(r["json"]) for r in rows]
 
     def get_field_paths(self, forecast_id: str, lead: int) -> tuple[Path, Path] | None:
-        row = self._conn.execute(
-            "SELECT npz_path, png_path FROM forecast_fields WHERE forecast_id=? AND lead_minutes=?",
-            (forecast_id, lead)).fetchone()
-        return (Path(row["npz_path"]), Path(row["png_path"])) if row else None
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT npz_path, png_path FROM forecast_fields WHERE forecast_id=? AND lead_minutes=?",
+                (forecast_id, lead)).fetchone()
+            return (Path(row["npz_path"]), Path(row["png_path"])) if row else None
 
     def get_uncertainty_png_path(self, forecast_id: str) -> Path | None:
         p = self.artifacts / forecast_id / "uncertainty.png"
@@ -178,8 +197,9 @@ class Store:
             self._conn.commit()
 
     def get_alert(self, alert_id: str) -> Alert | None:
-        row = self._conn.execute("SELECT json FROM alerts WHERE id=?", (alert_id,)).fetchone()
-        return Alert.model_validate_json(row["json"]) if row else None
+        with self._lock:
+            row = self._conn.execute("SELECT json FROM alerts WHERE id=?", (alert_id,)).fetchone()
+            return Alert.model_validate_json(row["json"]) if row else None
 
     def list_alerts(self, run_id: str | None = None, event_id: str | None = None,
                     severity: str | None = None) -> list[Alert]:
@@ -194,7 +214,8 @@ class Store:
         if conds:
             q += " WHERE " + " AND ".join(conds)
         q += " ORDER BY issued_at"
-        return [Alert.model_validate_json(r["json"]) for r in self._conn.execute(q, args).fetchall()]
+        with self._lock:
+            return [Alert.model_validate_json(r["json"]) for r in self._conn.execute(q, args).fetchall()]
 
     # -- health & verification ------------------------------------------------
     def put_data_health(self, items: list[DataHealth]) -> None:
@@ -206,9 +227,10 @@ class Store:
             self._conn.commit()
 
     def latest_data_health(self) -> list[DataHealth]:
-        rows = self._conn.execute(
-            "SELECT json FROM data_health WHERE ts = (SELECT MAX(ts) FROM data_health)").fetchall()
-        return [DataHealth.model_validate_json(r["json"]) for r in rows]
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT json FROM data_health WHERE ts = (SELECT MAX(ts) FROM data_health)").fetchall()
+            return [DataHealth.model_validate_json(r["json"]) for r in rows]
 
     def put_verification(self, run_id: str, metrics: dict) -> None:
         with self._lock:
@@ -217,15 +239,26 @@ class Store:
             self._conn.commit()
 
     def get_verification(self, run_id: str) -> dict | None:
-        row = self._conn.execute("SELECT metrics FROM verification WHERE run_id=?", (run_id,)).fetchone()
-        return json.loads(row["metrics"]) if row else None
+        with self._lock:
+            row = self._conn.execute("SELECT metrics FROM verification WHERE run_id=?", (run_id,)).fetchone()
+            return json.loads(row["metrics"]) if row else None
 
     def put_training_samples(self, run_id: str, rows: list[dict]) -> Path:
-        import pandas as pd
-        p = self.artifacts / f"training_samples_{run_id}.parquet"
+        p_csv = self.artifacts / f"training_samples_{run_id}.csv"
         try:
-            pd.DataFrame(rows).to_parquet(p, index=False)
+            import pandas as pd
+            p_parquet = self.artifacts / f"training_samples_{run_id}.parquet"
+            pd.DataFrame(rows).to_parquet(p_parquet, index=False)
+            return p_parquet
         except Exception:
-            p = self.artifacts / f"training_samples_{run_id}.csv"
-            pd.DataFrame(rows).to_csv(p, index=False)
-        return p
+            try:
+                import csv
+                if rows:
+                    keys = list(rows[0].keys())
+                    with open(p_csv, "w", newline="", encoding="utf-8") as f:
+                        w = csv.DictWriter(f, fieldnames=keys)
+                        w.writeheader()
+                        w.writerows(rows)
+            except Exception:
+                pass
+            return p_csv

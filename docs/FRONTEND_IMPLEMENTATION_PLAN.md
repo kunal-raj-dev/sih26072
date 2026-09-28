@@ -1,3 +1,4 @@
+
 # Vajra — Frontend Implementation Plan (presentation-readiness roadmap)
 
 **Companion docs:** `FRONTEND_UX_AUDIT.md` (verified defects + traceability) ·
@@ -13,10 +14,10 @@ minimal-change endpoint; every phase ends with a verifiable check on the running
 
 ## 0. Backend prerequisites (small, tracked separately)
 
-| ID | Fix | Why | Files | Status |
-|---|---|---|---|---|
-| **B-1** | Alert block geocoding population: root-cause why `affected_blocks`/`population_exposed` are empty (spatial index loads only 24 districts/85 blocks vs MASTER.md's 765/534; possible causes: reduced admin GeoJSON, cell placement outside block coverage, intersect fallback path) | Block-level targeting is the flagship story; DEMO.md promises named blocks + population | `src/vajra/geocoding.py`, `data/admin/*.geojson`, `src/vajra/alerts.py` | **SMALL** |
-| **B-2** | Admin dataset scale-up: load the full Survey-of-India district/block set (or honestly document the reduced set everywhere) | Demo claim consistency | `data/admin/`, `src/vajra/geocoding.py` | **SMALL** |
+| ID            | Fix                                                                                                                                                                                                                                                                                   | Why                                                                                     | Files                                                                         | Status          |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | --------------- |
+| **B-1** | Alert block geocoding population: root-cause why`affected_blocks`/`population_exposed` are empty (spatial index loads only 24 districts/85 blocks vs MASTER.md's 765/534; possible causes: reduced admin GeoJSON, cell placement outside block coverage, intersect fallback path) | Block-level targeting is the flagship story; DEMO.md promises named blocks + population | `src/vajra/geocoding.py`, `data/admin/*.geojson`, `src/vajra/alerts.py` | **SMALL** |
+| **B-2** | Admin dataset scale-up: load the full Survey-of-India district/block set (or honestly document the reduced set everywhere)                                                                                                                                                            | Demo claim consistency                                                                  | `data/admin/`, `src/vajra/geocoding.py`                                   | **SMALL** |
 
 Everything else in this plan is frontend-only. No other backend changes are assumed.
 
@@ -24,74 +25,74 @@ Everything else in this plan is frontend-only. No other backend changes are assu
 
 ## Phase P0 — Demo-critical correctness (must be first)
 
-| Field | Content |
-|---|---|
-| **Objective** | Fix the four P0 defects so prediction, warning, and verification are true on screen |
-| **Why** | All downstream UX work is worthless if the core moments are broken or fabricated (audit §3) |
-| **Current → target** | Alert center always empty → alerts visible in their replay-time window; blocks/population empty → populated (or honest fallback); scoreboard fabricates ROC 0.86 → mode-gated, no invented numbers; boot runs wrong event at wrong cycle → canonical event at peak cycle, storm-zoomed |
-| **UX goal** | Truthfulness of every L1 element |
-| **IA change** | None yet |
-| **Design change** | None yet |
-| **Component change** | `renderAlerts` filter; scoreboard modal gating; boot sequence |
-| **Map change** | Camera fit-to-event; default cycle = peak |
-| **Interaction change** | None new |
-| **Motion change** | None |
-| **API dependency** | Existing endpoints only |
-| **Backend dependency** | B-1 |
-| **Data dependency** | Admin coverage (B-1/B-2) |
-| **Files** | `web/app.js` (alerts filter, scoreboard, boot), `src/vajra/geocoding.py` (B-1) |
-| **KEEP** | Honesty badges, footer, CAP flows |
-| **REMOVE** | `roc_auc || 0.86` fallback; unconditional verdict badges |
-| **ADD** | Alert replay-window filter; honest "no alert above threshold" state; zero-state boot |
-| **Testing** | API test: alerts match window; UI check: alerts visible at issue cycles; scoreboard renders no numbers when metrics null |
-| **Accessibility** | n/a |
-| **Performance** | Boot ≤ 8 s |
-| **Demo impact** | **Critical** — unblocks every moment |
-| **Risks** | Geocoding fix may reveal synthetic cells outside block coverage → place case-study cells within coverage (SIMULATION-labelled; honest) |
-| **Definition of done** | All four audit P0 defects fixed and verified in a fresh run |
-| **Acceptance** | Judge sees a live alert during replay; blocks + population present or explicitly "pending"; scoreboard shows only real numbers; boot lands on Bihar squall peak cycle, storm-zoomed |
+| Field                        | Content                                                                                                                                                                                                                                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Objective**          | Fix the four P0 defects so prediction, warning, and verification are true on screen                                                                                                                                                                                                        |
+| **Why**                | All downstream UX work is worthless if the core moments are broken or fabricated (audit §3)                                                                                                                                                                                               |
+| **Current → target**  | Alert center always empty → alerts visible in their replay-time window; blocks/population empty → populated (or honest fallback); scoreboard fabricates ROC 0.86 → mode-gated, no invented numbers; boot runs wrong event at wrong cycle → canonical event at peak cycle, storm-zoomed |
+| **UX goal**            | Truthfulness of every L1 element                                                                                                                                                                                                                                                           |
+| **IA change**          | None yet                                                                                                                                                                                                                                                                                   |
+| **Design change**      | None yet                                                                                                                                                                                                                                                                                   |
+| **Component change**   | `renderAlerts` filter; scoreboard modal gating; boot sequence                                                                                                                                                                                                                            |
+| **Map change**         | Camera fit-to-event; default cycle = peak                                                                                                                                                                                                                                                  |
+| **Interaction change** | None new                                                                                                                                                                                                                                                                                   |
+| **Motion change**      | None                                                                                                                                                                                                                                                                                       |
+| **API dependency**     | Existing endpoints only                                                                                                                                                                                                                                                                    |
+| **Backend dependency** | B-1                                                                                                                                                                                                                                                                                        |
+| **Data dependency**    | Admin coverage (B-1/B-2)                                                                                                                                                                                                                                                                   |
+| **Files**              | `web/app.js` (alerts filter, scoreboard, boot), `src/vajra/geocoding.py` (B-1)                                                                                                                                                                                                         |
+| **KEEP**               | Honesty badges, footer, CAP flows                                                                                                                                                                                                                                                          |
+| **REMOVE**             | `roc_auc                                                                                                                                                                                                                                                                                   |
+| **ADD**                | Alert replay-window filter; honest "no alert above threshold" state; zero-state boot                                                                                                                                                                                                       |
+| **Testing**            | API test: alerts match window; UI check: alerts visible at issue cycles; scoreboard renders no numbers when metrics null                                                                                                                                                                   |
+| **Accessibility**      | n/a                                                                                                                                                                                                                                                                                        |
+| **Performance**        | Boot ≤ 8 s                                                                                                                                                                                                                                                                                |
+| **Demo impact**        | **Critical** — unblocks every moment                                                                                                                                                                                                                                                |
+| **Risks**              | Geocoding fix may reveal synthetic cells outside block coverage → place case-study cells within coverage (SIMULATION-labelled; honest)                                                                                                                                                    |
+| **Definition of done** | All four audit P0 defects fixed and verified in a fresh run                                                                                                                                                                                                                                |
+| **Acceptance**         | Judge sees a live alert during replay; blocks + population present or explicitly "pending"; scoreboard shows only real numbers; boot lands on Bihar squall peak cycle, storm-zoomed                                                                                                        |
 
 **Tasks**
 
-| ID | Task | Why | Files | Depends on | Input → output | Test | Acceptance |
-|---|---|---|---|---|---|---|---|
-| T0.1 | Filter alert center by `valid_from ≤ cycle ≤ valid_until` (replay time), fallback to ±30 min around issue only in LIVE mode | Fixes permanent "no alerts" (audit §3.1) | `web/app.js` | — | alerts+cycle → filtered list | unit: filter fn; UI: alerts appear at issue cycles | DDMA card never says "all clear" during a storm |
-| T0.2 | Root-cause + fix block geocoding population (B-1) | Flagship story silent (audit §3.2) | `geocoding.py`, admin data | — | cell bbox → blocks/pop | test: Patna-area cell resolves blocks; run-level: ≥1 alert with blocks on Bihar event | Threat card shows named blocks or honest "block resolution pending" |
-| T0.3 | Scoreboard mode-gating + remove fabricated fallbacks | Honesty violation (audit §3.4) | `web/app.js` | — | scoreboard payload → gated render | unit: null-metric rendering | SIMULATION shows benchmark pointer; REPLAY shows full audit; zero invented values |
-| T0.4 | Zero-state boot: autorun `bihar_squall_2026`, land on peak cycle, fit camera to event bbox | Zero-state contract (blueprint §3) | `web/app.js` | T0.1 | boot → populated scene | manual: 1366/1920 screenshots | First paint = storm-zoomed mid-event with threat data |
-| T0.5 | Fix horizontal overflow + pre-warm benchmark run `sevir_s810646` | Polish + demo-rail prep | `web/app.js`, `web/style.css` | — | — | overflow check at 1920 | No horizontal scrollbar; benchmark run cached |
+| ID   | Task                                                                                                                            | Why                                       | Files                             | Depends on | Input → output                    | Test                                                                                   | Acceptance                                                                        |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- | --------------------------------- | ---------- | ---------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| T0.1 | Filter alert center by`valid_from ≤ cycle ≤ valid_until` (replay time), fallback to ±30 min around issue only in LIVE mode | Fixes permanent "no alerts" (audit §3.1) | `web/app.js`                    | —         | alerts+cycle → filtered list      | unit: filter fn; UI: alerts appear at issue cycles                                     | DDMA card never says "all clear" during a storm                                   |
+| T0.2 | Root-cause + fix block geocoding population (B-1)                                                                               | Flagship story silent (audit §3.2)       | `geocoding.py`, admin data      | —         | cell bbox → blocks/pop            | test: Patna-area cell resolves blocks; run-level: ≥1 alert with blocks on Bihar event | Threat card shows named blocks or honest "block resolution pending"               |
+| T0.3 | Scoreboard mode-gating + remove fabricated fallbacks                                                                            | Honesty violation (audit §3.4)           | `web/app.js`                    | —         | scoreboard payload → gated render | unit: null-metric rendering                                                            | SIMULATION shows benchmark pointer; REPLAY shows full audit; zero invented values |
+| T0.4 | Zero-state boot: autorun`bihar_squall_2026`, land on peak cycle, fit camera to event bbox                                     | Zero-state contract (blueprint §3)       | `web/app.js`                    | T0.1       | boot → populated scene            | manual: 1366/1920 screenshots                                                          | First paint = storm-zoomed mid-event with threat data                             |
+| T0.5 | Fix horizontal overflow + pre-warm benchmark run`sevir_s810646`                                                               | Polish + demo-rail prep                   | `web/app.js`, `web/style.css` | —         | —                                 | overflow check at 1920                                                                 | No horizontal scrollbar; benchmark run cached                                     |
 
 ---
 
 ## Phase P1 — Timeline as the narrative instrument
 
-| Field | Content |
-|---|---|
-| **Objective** | One axis communicates past → NOW → forecast with alert/verification markers |
-| **Why** | Research principle 4/§4.1: observed vs forecast must be doubly encoded; the old horizon tags conflate progress with lead time |
-| **Current → target** | Fraction slider + 9 px tags → segmented axis (observed solid / forecast dashed), NOW pin, +30/+60 ticks, alert ▲ markers (IMD-coloured), peak flag, verification ✓/✗ at settlement, click-to-jump |
-| **UX goal** | Temporal comprehension without narration |
-| **IA change** | Horizon tags removed (semantics absorbed into axis) |
-| **Design change** | Timeline restyle; marker chips |
-| **Component change** | New timeline renderer (plain DOM/SVG) |
-| **Map change** | None |
-| **Interaction change** | Click-to-jump; End key = peak (not last); T0 button = first alert issue cycle |
-| **Motion change** | Playhead only |
-| **API dependency** | `/alerts` (valid_from, imd_stage), `/runs/{id}/forecasts` (already loaded) |
-| **Backend dependency** | None |
-| **Data dependency** | None |
-| **Files** | `web/app.js`, `web/index.html`, `web/style.css` |
-| **KEEP** | Transport controls, speed, loop, keyboard |
-| **REMOVE** | Horizon tag chips |
-| **MERGE** | Lead select into timeline controls |
-| **ADD** | Markers, segments, peak landing |
-| **Testing** | Unit: axis mapping fn (time→x); UI: markers align with alert times |
-| **Accessibility** | aria-labels on markers; keyboard jump |
-| **Performance** | Marker render O(alerts) |
-| **Demo impact** | High — moments 3/6/7 depend on it |
-| **Risks** | Marker clutter on 82-alert SEVIR run → cap visible markers, cluster |
-| **DoD** | Judge can answer "when did it warn / when will it hit / was it verified" from the axis |
-| **Acceptance** | Axis shows solid past, dashed future, pinned NOW, ≥1 alert marker on demo event |
+| Field                        | Content                                                                                                                                                                                               |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Objective**          | One axis communicates past → NOW → forecast with alert/verification markers                                                                                                                         |
+| **Why**                | Research principle 4/§4.1: observed vs forecast must be doubly encoded; the old horizon tags conflate progress with lead time                                                                        |
+| **Current → target**  | Fraction slider + 9 px tags → segmented axis (observed solid / forecast dashed), NOW pin, +30/+60 ticks, alert ▲ markers (IMD-coloured), peak flag, verification ✓/✗ at settlement, click-to-jump |
+| **UX goal**            | Temporal comprehension without narration                                                                                                                                                              |
+| **IA change**          | Horizon tags removed (semantics absorbed into axis)                                                                                                                                                   |
+| **Design change**      | Timeline restyle; marker chips                                                                                                                                                                        |
+| **Component change**   | New timeline renderer (plain DOM/SVG)                                                                                                                                                                 |
+| **Map change**         | None                                                                                                                                                                                                  |
+| **Interaction change** | Click-to-jump; End key = peak (not last); T0 button = first alert issue cycle                                                                                                                         |
+| **Motion change**      | Playhead only                                                                                                                                                                                         |
+| **API dependency**     | `/alerts` (valid_from, imd_stage), `/runs/{id}/forecasts` (already loaded)                                                                                                                        |
+| **Backend dependency** | None                                                                                                                                                                                                  |
+| **Data dependency**    | None                                                                                                                                                                                                  |
+| **Files**              | `web/app.js`, `web/index.html`, `web/style.css`                                                                                                                                                 |
+| **KEEP**               | Transport controls, speed, loop, keyboard                                                                                                                                                             |
+| **REMOVE**             | Horizon tag chips                                                                                                                                                                                     |
+| **MERGE**              | Lead select into timeline controls                                                                                                                                                                    |
+| **ADD**                | Markers, segments, peak landing                                                                                                                                                                       |
+| **Testing**            | Unit: axis mapping fn (time→x); UI: markers align with alert times                                                                                                                                   |
+| **Accessibility**      | aria-labels on markers; keyboard jump                                                                                                                                                                 |
+| **Performance**        | Marker render O(alerts)                                                                                                                                                                               |
+| **Demo impact**        | High — moments 3/6/7 depend on it                                                                                                                                                                    |
+| **Risks**              | Marker clutter on 82-alert SEVIR run → cap visible markers, cluster                                                                                                                                  |
+| **DoD**                | Judge can answer "when did it warn / when will it hit / was it verified" from the axis                                                                                                                |
+| **Acceptance**         | Axis shows solid past, dashed future, pinned NOW, ≥1 alert marker on demo event                                                                                                                      |
 
 **Tasks:** T1.1 axis model + segments · T1.2 markers (alert/impact/verification/peak) ·
 T1.3 controls rewiring (End=peak, T0=first issue, horizon tags removed) · T1.4 lead-select
@@ -101,32 +102,32 @@ merge. (Same task-field columns as P0; files as above.)
 
 ## Phase P2 — Threat hero + alert↔map linkage
 
-| Field | Content |
-|---|---|
-| **Objective** | One card answers WHAT/WHERE/WHEN/CONFIDENT/WHY/ACTION; rail and map are linked |
-| **Why** | Research §5.1/§2.2: probability lives with the storm object; COP principle (one authoritative narrative) |
-| **Current → target** | Alert list + signal dump → threat hero card + ≤2 alert cards + evidence line; cell popup humanized; alert↔cell hover/flyTo sync |
-| **UX goal** | Comprehension at a glance (SA level 2–3) |
-| **IA change** | Right rail re-ordered: threat → alert → event (collapsed) |
-| **Design change** | Hero card typography (28 px P value), chips |
-| **Component change** | New threat-card component; popup rework |
-| **Map change** | Cell hover highlight from rail; pulse-on-alert |
-| **Interaction change** | "Show on map" flyTo; card collapse/expand |
-| **Motion change** | Single pulse on new/escalated alert |
-| **API dependency** | `/alerts` (all fields incl. data_quality, contributing_signals), `/forecasts/{id}/cells.geojson` |
-| **Backend dependency** | B-1 (blocks) |
-| **Data dependency** | None |
-| **Files** | `web/app.js`, `web/index.html`, `web/style.css` |
-| **KEEP** | CAP buttons, bulletin link |
-| **REWORK** | Signal dump → evidence line + L3 raw table |
-| **ADD** | Trend (Δp vs prev cycle), data-quality chips, show-on-map |
-| **Testing** | Unit: evidence formatter; UI: linkage both directions |
-| **Accessibility** | aria-live on threat card |
-| **Performance** | Card render ≤ 16 ms |
-| **Demo impact** | Critical — moments 1/2/5 |
-| **Risks** | Empty geocoding → honest fallback text (never fake, never "all clear") |
-| **DoD** | Card answers all six questions without opening anything else |
-| **Acceptance** | On Bihar peak cycle: hazard, P with reference class, region, window, confidence+rung, data chips, evidence line, action all visible |
+| Field                        | Content                                                                                                                             |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Objective**          | One card answers WHAT/WHERE/WHEN/CONFIDENT/WHY/ACTION; rail and map are linked                                                      |
+| **Why**                | Research §5.1/§2.2: probability lives with the storm object; COP principle (one authoritative narrative)                          |
+| **Current → target**  | Alert list + signal dump → threat hero card + ≤2 alert cards + evidence line; cell popup humanized; alert↔cell hover/flyTo sync  |
+| **UX goal**            | Comprehension at a glance (SA level 2–3)                                                                                           |
+| **IA change**          | Right rail re-ordered: threat → alert → event (collapsed)                                                                         |
+| **Design change**      | Hero card typography (28 px P value), chips                                                                                         |
+| **Component change**   | New threat-card component; popup rework                                                                                             |
+| **Map change**         | Cell hover highlight from rail; pulse-on-alert                                                                                      |
+| **Interaction change** | "Show on map" flyTo; card collapse/expand                                                                                           |
+| **Motion change**      | Single pulse on new/escalated alert                                                                                                 |
+| **API dependency**     | `/alerts` (all fields incl. data_quality, contributing_signals), `/forecasts/{id}/cells.geojson`                                |
+| **Backend dependency** | B-1 (blocks)                                                                                                                        |
+| **Data dependency**    | None                                                                                                                                |
+| **Files**              | `web/app.js`, `web/index.html`, `web/style.css`                                                                               |
+| **KEEP**               | CAP buttons, bulletin link                                                                                                          |
+| **REWORK**             | Signal dump → evidence line + L3 raw table                                                                                         |
+| **ADD**                | Trend (Δp vs prev cycle), data-quality chips, show-on-map                                                                          |
+| **Testing**            | Unit: evidence formatter; UI: linkage both directions                                                                               |
+| **Accessibility**      | aria-live on threat card                                                                                                            |
+| **Performance**        | Card render ≤ 16 ms                                                                                                                |
+| **Demo impact**        | Critical — moments 1/2/5                                                                                                           |
+| **Risks**              | Empty geocoding → honest fallback text (never fake, never "all clear")                                                             |
+| **DoD**                | Card answers all six questions without opening anything else                                                                        |
+| **Acceptance**         | On Bihar peak cycle: hazard, P with reference class, region, window, confidence+rung, data chips, evidence line, action all visible |
 
 **Tasks:** T2.1 hero card · T2.2 evidence line + WHY disclosure · T2.3 show-on-map + pulse ·
 T2.4 popup humanization (km/h, dBZ, km²; drop raw px/°-per-cycle to L3) · T2.5 DDMA
@@ -136,32 +137,32 @@ overview from real alerts (honest empty state).
 
 ## Phase P3 — Map presets & hierarchy
 
-| Field | Content |
-|---|---|
-| **Objective** | OBSERVE / NOWCAST / COMPARE presets replace the 15-checkbox jungle; camera and legend follow the story |
-| **Why** | Audit §4 (layer jungle), research principle 11/§6.2 (palette separation) |
-| **Current → target** | 15 checkboxes → 3 preset buttons + expert drawer; COMPARE is an exclusive mode with fixed caption (kills the slider conflict); on-map cell P labels at zoom ≥ 7; contextual legend |
-| **UX goal** | Map reads without the rail |
-| **IA change** | Layers panel → drawer (L3) |
-| **Design change** | Preset segmented control; legend contextual |
-| **Component change** | Preset state machine; drawer |
-| **Map change** | Layer visibility matrix per preset; label layer; COMPARE split |
-| **Interaction change** | One-click preset switching; R = reset view |
-| **Motion change** | Field fade ≤ 150 ms on cycle change |
-| **API dependency** | Existing |
-| **Backend dependency** | None |
-| **Data dependency** | None |
-| **Files** | `web/app.js`, `web/index.html`, `web/style.css` |
-| **KEEP** | All existing layers (relocated to drawer) |
-| **REWORK** | Split-slider → COMPARE mode |
-| **ADD** | Presets, on-map labels, contextual legend, reset view |
-| **Testing** | Table-driven: preset → expected layer visibility |
-| **Accessibility** | Preset buttons keyboard-operable |
-| **Performance** | No layer reload on preset switch (visibility toggles only) |
-| **Demo impact** | High — moments 2/3/4/7 |
-| **Risks** | Probability palette vs IMD colours confusion → distinct ramp + legend note |
-| **DoD** | Presenter switches narrative stages with one control |
-| **Acceptance** | Preset switch ≤ 1 click, no reload flicker, legend matches visible layers |
+| Field                        | Content                                                                                                                                                                              |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Objective**          | OBSERVE / NOWCAST / COMPARE presets replace the 15-checkbox jungle; camera and legend follow the story                                                                               |
+| **Why**                | Audit §4 (layer jungle), research principle 11/§6.2 (palette separation)                                                                                                           |
+| **Current → target**  | 15 checkboxes → 3 preset buttons + expert drawer; COMPARE is an exclusive mode with fixed caption (kills the slider conflict); on-map cell P labels at zoom ≥ 7; contextual legend |
+| **UX goal**            | Map reads without the rail                                                                                                                                                           |
+| **IA change**          | Layers panel → drawer (L3)                                                                                                                                                          |
+| **Design change**      | Preset segmented control; legend contextual                                                                                                                                          |
+| **Component change**   | Preset state machine; drawer                                                                                                                                                         |
+| **Map change**         | Layer visibility matrix per preset; label layer; COMPARE split                                                                                                                       |
+| **Interaction change** | One-click preset switching; R = reset view                                                                                                                                           |
+| **Motion change**      | Field fade ≤ 150 ms on cycle change                                                                                                                                                 |
+| **API dependency**     | Existing                                                                                                                                                                             |
+| **Backend dependency** | None                                                                                                                                                                                 |
+| **Data dependency**    | None                                                                                                                                                                                 |
+| **Files**              | `web/app.js`, `web/index.html`, `web/style.css`                                                                                                                                |
+| **KEEP**               | All existing layers (relocated to drawer)                                                                                                                                            |
+| **REWORK**             | Split-slider → COMPARE mode                                                                                                                                                         |
+| **ADD**                | Presets, on-map labels, contextual legend, reset view                                                                                                                                |
+| **Testing**            | Table-driven: preset → expected layer visibility                                                                                                                                    |
+| **Accessibility**      | Preset buttons keyboard-operable                                                                                                                                                     |
+| **Performance**        | No layer reload on preset switch (visibility toggles only)                                                                                                                           |
+| **Demo impact**        | High — moments 2/3/4/7                                                                                                                                                              |
+| **Risks**              | Probability palette vs IMD colours confusion → distinct ramp + legend note                                                                                                          |
+| **DoD**                | Presenter switches narrative stages with one control                                                                                                                                 |
+| **Acceptance**         | Preset switch ≤ 1 click, no reload flicker, legend matches visible layers                                                                                                           |
 
 **Tasks:** T3.1 preset state machine · T3.2 event-fit camera + reset view · T3.3 expert
 drawer (all checkboxes + opacity) · T3.4 COMPARE mode with caption · T3.5 contextual
@@ -171,29 +172,29 @@ legend · T3.6 on-map probability labels.
 
 ## Phase P4 — Design system & projector legibility *(parallel with P2/P3 after P1)*
 
-| Field | Content |
-|---|---|
-| **Objective** | Judge-seat readability; one coherent visual system |
-| **Why** | Audit §4 (9–13 px text), research §6.1 (≥16 px body, hero 28 px+, AA contrast) |
-| **Current → target** | 13 px base → 16 px body / 14 px titles / 28–32 px hero numbers; spacing on 4/8 grid; status-colour tokens; IMD traffic colours quarantined to the alert strip |
-| **UX goal** | Legibility at 3–5 m |
-| **IA change** | None |
-| **Design change** | Type scale, spacing, colour tokens |
-| **Component change** | CSS-only (plus class hooks) |
-| **Map change** | Legend swatch contrast |
-| **Interaction change** | Focus-visible states |
-| **Motion change** | None |
-| **API/Backend/Data dependency** | None |
-| **Files** | `web/style.css`, minor `web/index.html` |
-| **KEEP** | Dark theme, layout skeleton |
-| **SIMPLIFY** | Panel chrome; border/radius unification |
-| **Testing** | Computed-style checks; printed-screenshot distance test |
-| **Accessibility** | WCAG AA contrast pass; focus rings |
-| **Performance** | None |
-| **Demo impact** | High — every moment is seen through this |
-| **Risks** | Density loss → panels may scroll more; mitigate with drawer strategy |
-| **DoD** | All L1 text legible from 3 m at 1080p |
-| **Acceptance** | 1366/1920 screenshot review: no L1 text below floor; AA pass |
+| Field                                 | Content                                                                                                                                                         |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Objective**                   | Judge-seat readability; one coherent visual system                                                                                                              |
+| **Why**                         | Audit §4 (9–13 px text), research §6.1 (≥16 px body, hero 28 px+, AA contrast)                                                                              |
+| **Current → target**           | 13 px base → 16 px body / 14 px titles / 28–32 px hero numbers; spacing on 4/8 grid; status-colour tokens; IMD traffic colours quarantined to the alert strip |
+| **UX goal**                     | Legibility at 3–5 m                                                                                                                                            |
+| **IA change**                   | None                                                                                                                                                            |
+| **Design change**               | Type scale, spacing, colour tokens                                                                                                                              |
+| **Component change**            | CSS-only (plus class hooks)                                                                                                                                     |
+| **Map change**                  | Legend swatch contrast                                                                                                                                          |
+| **Interaction change**          | Focus-visible states                                                                                                                                            |
+| **Motion change**               | None                                                                                                                                                            |
+| **API/Backend/Data dependency** | None                                                                                                                                                            |
+| **Files**                       | `web/style.css`, minor `web/index.html`                                                                                                                     |
+| **KEEP**                        | Dark theme, layout skeleton                                                                                                                                     |
+| **SIMPLIFY**                    | Panel chrome; border/radius unification                                                                                                                         |
+| **Testing**                     | Computed-style checks; printed-screenshot distance test                                                                                                         |
+| **Accessibility**               | WCAG AA contrast pass; focus rings                                                                                                                              |
+| **Performance**                 | None                                                                                                                                                            |
+| **Demo impact**                 | High — every moment is seen through this                                                                                                                       |
+| **Risks**                       | Density loss → panels may scroll more; mitigate with drawer strategy                                                                                           |
+| **DoD**                         | All L1 text legible from 3 m at 1080p                                                                                                                           |
+| **Acceptance**                  | 1366/1920 screenshot review: no L1 text below floor; AA pass                                                                                                    |
 
 **Tasks:** T4.1 tokens + type scale · T4.2 colour-token separation (probability vs IMD vs
 status) · T4.3 panel normalization (right-rail order, bottom strip) · T4.4 contrast +
@@ -203,32 +204,32 @@ focus states.
 
 ## Phase P5 — The verification moment
 
-| Field | Content |
-|---|---|
-| **Objective** | "Was it right?" is visible without opening a modal |
-| **Why** | Audit §4 (verification hidden), research §5.1 (projection = SA level 3); per-alert settlement data already exists |
-| **Current → target** | Hidden table/modal → per-alert settled verdict (✓ VERIFIED — n flashes / ✗ NOT CONFIRMED — predicted P%) + bottom VERIFY strip with 4 hero numbers (mode-gated) + reliability mini-chart |
-| **UX goal** | Trust through evidence |
-| **IA change** | Verification leaves left panel; strip becomes L1 |
-| **Design change** | Hero number typography; verdict chips |
-| **Component change** | Verdict calculator (client-side from flashes∩window); strip; mini-chart |
-| **Map change** | COMPARE preset used for the visual moment |
-| **Interaction change** | Full audit behind one click (existing modal, gated) |
-| **Motion change** | None |
-| **API dependency** | `/events/{id}/flashes.geojson`, `/runs/{id}/scoreboard`, alerts |
-| **Backend dependency** | None |
-| **Data dependency** | None |
-| **Files** | `web/app.js`, `web/index.html`, `web/style.css` |
-| **KEEP** | Scoreboard modal (gated), bulletin print |
-| **REMOVE** | Fabricated fallback numbers (from P0, kept removed) |
-| **ADD** | Settled verdicts, VERIFY strip, reliability mini-chart |
-| **Testing** | Unit: verdict fn (window boundary cases); UI: on SEVIR run, settled alerts show verdicts |
-| **Accessibility** | Verdicts announced (aria-live) |
-| **Performance** | Flash filtering O(n) cached |
-| **Demo impact** | Critical — moment 7 (the honesty close) |
-| **Risks** | Flash-time semantics (epoch contract) — reuse existing UI filter logic |
-| **DoD** | Verification readable from the stage without a modal |
-| **Acceptance** | On `sevir_s810646`: ≥1 settled ✓ verdict visible; strip shows BSS +0.50 / FAR 0.08 / POD 0.52 / CSI 0.50 from the real scoreboard |
+| Field                        | Content                                                                                                                                                                                       |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Objective**          | "Was it right?" is visible without opening a modal                                                                                                                                            |
+| **Why**                | Audit §4 (verification hidden), research §5.1 (projection = SA level 3); per-alert settlement data already exists                                                                           |
+| **Current → target**  | Hidden table/modal → per-alert settled verdict (✓ VERIFIED — n flashes / ✗ NOT CONFIRMED — predicted P%) + bottom VERIFY strip with 4 hero numbers (mode-gated) + reliability mini-chart |
+| **UX goal**            | Trust through evidence                                                                                                                                                                        |
+| **IA change**          | Verification leaves left panel; strip becomes L1                                                                                                                                              |
+| **Design change**      | Hero number typography; verdict chips                                                                                                                                                         |
+| **Component change**   | Verdict calculator (client-side from flashes∩window); strip; mini-chart                                                                                                                      |
+| **Map change**         | COMPARE preset used for the visual moment                                                                                                                                                     |
+| **Interaction change** | Full audit behind one click (existing modal, gated)                                                                                                                                           |
+| **Motion change**      | None                                                                                                                                                                                          |
+| **API dependency**     | `/events/{id}/flashes.geojson`, `/runs/{id}/scoreboard`, alerts                                                                                                                           |
+| **Backend dependency** | None                                                                                                                                                                                          |
+| **Data dependency**    | None                                                                                                                                                                                          |
+| **Files**              | `web/app.js`, `web/index.html`, `web/style.css`                                                                                                                                         |
+| **KEEP**               | Scoreboard modal (gated), bulletin print                                                                                                                                                      |
+| **REMOVE**             | Fabricated fallback numbers (from P0, kept removed)                                                                                                                                           |
+| **ADD**                | Settled verdicts, VERIFY strip, reliability mini-chart                                                                                                                                        |
+| **Testing**            | Unit: verdict fn (window boundary cases); UI: on SEVIR run, settled alerts show verdicts                                                                                                      |
+| **Accessibility**      | Verdicts announced (aria-live)                                                                                                                                                                |
+| **Performance**        | Flash filtering O(n) cached                                                                                                                                                                   |
+| **Demo impact**        | Critical — moment 7 (the honesty close)                                                                                                                                                      |
+| **Risks**              | Flash-time semantics (epoch contract) — reuse existing UI filter logic                                                                                                                       |
+| **DoD**                | Verification readable from the stage without a modal                                                                                                                                          |
+| **Acceptance**         | On`sevir_s810646`: ≥1 settled ✓ verdict visible; strip shows BSS +0.50 / FAR 0.08 / POD 0.52 / CSI 0.50 from the real scoreboard                                                          |
 
 **Tasks:** T5.1 settlement verdicts · T5.2 VERIFY strip · T5.3 reliability mini-chart ·
 T5.4 audit modal refinements (mode-gate consistency).
@@ -237,34 +238,35 @@ T5.4 audit modal refinements (mode-gate consistency).
 
 ## Phase P6 — DDMA persona completion *(after P2)* — **COMPLETE & VERIFIED**
 
-| Field | Content |
-|---|---|
-| **Status** | ✅ **COMPLETE & VERIFIED** (All 4 tasks verified by automated pytest suites & GIS test runs) |
-| **Objective** | DDMA mode demonstrates impact without lying |
-| **Why** | Audit §3.1 consequence + DEMO.md promises (blocks, population, sirens) |
-| **Current → target** | Static overview card + hover-only blocks → overview from real alerts; block tint = IMD stage for alert-intersected blocks only (bounded, honest claim); verification visible in DDMA too |
-| **UX goal** | Actionability for disaster managers |
-| **IA change** | Verification no longer IMD-only |
-| **Design change** | Block tint legend (stage colours) |
-| **Component change** | Impact overview recompute; block tint layer |
-| **Map change** | Alert-intersected blocks filled by stage |
-| **Interaction change** | Chime on escalation only |
-| **Motion change** | Single pulse per escalation |
-| **API dependency** | `/admin/blocks`, alerts |
-| **Backend dependency** | B-1 |
-| **Data dependency** | Block coverage |
-| **Files** | `web/app.js`, `web/style.css`, `public/app.js`, `public/style.css` |
-| **KEEP** | CAP dispatch, feed, bulletin |
-| **REWORK** | Overview card computation |
-| **Testing** | UI: tinted blocks match alert intersections; chime fires once per escalation |
-| **Accessibility** | Colour+label redundancy on tint |
-| **Performance** | Block filter cached per cycle |
-| **Demo impact** | High — moment 5 |
-| **Risks** | Overclaiming → tint only intersected blocks; "—" when none |
-| **DoD** | DDMA mode passes the same 30-second test as IMD mode |
-| **Acceptance** | During Bihar peak: ORANGE blocks visible with population counts; overview matches alerts |
+| Field                        | Content                                                                                                                                                                                   |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Status**             | ✅**COMPLETE & VERIFIED** (All 4 tasks verified by automated pytest suites & GIS test runs)                                                                                         |
+| **Objective**          | DDMA mode demonstrates impact without lying                                                                                                                                               |
+| **Why**                | Audit §3.1 consequence + DEMO.md promises (blocks, population, sirens)                                                                                                                   |
+| **Current → target**  | Static overview card + hover-only blocks → overview from real alerts; block tint = IMD stage for alert-intersected blocks only (bounded, honest claim); verification visible in DDMA too |
+| **UX goal**            | Actionability for disaster managers                                                                                                                                                       |
+| **IA change**          | Verification no longer IMD-only                                                                                                                                                           |
+| **Design change**      | Block tint legend (stage colours)                                                                                                                                                         |
+| **Component change**   | Impact overview recompute; block tint layer                                                                                                                                               |
+| **Map change**         | Alert-intersected blocks filled by stage                                                                                                                                                  |
+| **Interaction change** | Chime on escalation only                                                                                                                                                                  |
+| **Motion change**      | Single pulse per escalation                                                                                                                                                               |
+| **API dependency**     | `/admin/blocks`, alerts                                                                                                                                                                 |
+| **Backend dependency** | B-1                                                                                                                                                                                       |
+| **Data dependency**    | Block coverage                                                                                                                                                                            |
+| **Files**              | `web/app.js`, `web/style.css`, `public/app.js`, `public/style.css`                                                                                                                |
+| **KEEP**               | CAP dispatch, feed, bulletin                                                                                                                                                              |
+| **REWORK**             | Overview card computation                                                                                                                                                                 |
+| **Testing**            | UI: tinted blocks match alert intersections; chime fires once per escalation                                                                                                              |
+| **Accessibility**      | Colour+label redundancy on tint                                                                                                                                                           |
+| **Performance**        | Block filter cached per cycle                                                                                                                                                             |
+| **Demo impact**        | High — moment 5                                                                                                                                                                          |
+| **Risks**              | Overclaiming → tint only intersected blocks; "—" when none                                                                                                                              |
+| **DoD**                | DDMA mode passes the same 30-second test as IMD mode                                                                                                                                      |
+| **Acceptance**         | During Bihar peak: ORANGE blocks visible with population counts; overview matches alerts                                                                                                  |
 
 **Tasks:**
+
 - ✅ **T6.1 overview recompute:** Civil protection metrics computed from active cycle alerts (active warnings count, exposed population, target districts, target blocks with `(+X more)`, actionable SOP directive, honest calm/outside-blocks empty states).
 - ✅ **T6.2 block stage tinting:** Dynamic GeoJSON `alert-blocks-tint` layer tinting intersected blocks by IMD stage (`RED: #ef4444`, `ORANGE: #f97316`, `YELLOW: #eab308`) with prominent 2.2px border, rich inspection popups, and dynamic legend swath.
 - ✅ **T6.3 chime escalation gating:** Audio synthesizer chime and radar/card pulses fire strictly on alert stage escalation (`currentRank > lastRank`), preventing alarm fatigue during playback.
@@ -274,34 +276,35 @@ T5.4 audit modal refinements (mode-gate consistency).
 
 ## Phase P7 — Presentation rail + rehearsal hardening *(after P5)* — **COMPLETE & VERIFIED**
 
-| Field | Content |
-|---|---|
-| **Status** | ✅ **COMPLETE & VERIFIED** (All 5 tasks verified by automated pytest test suites & GIS validation runs) |
-| **Objective** | The 8 judge moments are one keystroke each; the demo survives failures |
-| **Why** | Blueprint §11/§13; audit §6 failure inventory |
-| **Current → target** | Manual orchestration → 8-chip demo rail (real state sequencer) + keyboard 1–8, R reset + pre-warmed runs + offline basemap fallback + error toasts |
-| **UX goal** | Presenter reliability |
-| **IA change** | Rail overlays console (dismissible = operational mode) |
-| **Design change** | Rail chips styling |
-| **Component change** | Rail component + step state definitions |
-| **Map change** | Camera targets per step |
-| **Interaction change** | 1–8/R/Space/←→/Home/End |
-| **Motion change** | Camera flyTo per step |
-| **API dependency** | Existing (rail triggers existing state changes) |
-| **Backend dependency** | None |
-| **Data dependency** | Pre-warmed runs (T0.5) |
-| **Files** | `web/app.js`, `web/index.html`, `web/style.css`, `public/app.js`, `public/index.html`, `public/style.css` |
-| **KEEP** | Everything (rail adds, not replaces) |
-| **ADD** | Rail, shortcuts, reset, basemap fallback, toast errors |
-| **Testing** | Scripted Playwright pass of the full 8-step sequence |
-| **Accessibility** | Rail keyboard-operable; visible focus |
-| **Performance** | Step switch ≤ 300 ms |
-| **Demo impact** | Critical — the whole rehearsal depends on it |
-| **Risks** | Rail becomes a second product → it only sets existing state; cap at 8 steps |
-| **DoD** | Full 4-minute script runs cold with ≤ 12 clicks |
-| **Acceptance** | 5 consecutive dry runs pass; each step has a rehearsed recovery |
+| Field                        | Content                                                                                                                                              |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Status**             | ✅**COMPLETE & VERIFIED** (All 5 tasks verified by automated pytest test suites & GIS validation runs)                                         |
+| **Objective**          | The 8 judge moments are one keystroke each; the demo survives failures                                                                               |
+| **Why**                | Blueprint §11/§13; audit §6 failure inventory                                                                                                     |
+| **Current → target**  | Manual orchestration → 8-chip demo rail (real state sequencer) + keyboard 1–8, R reset + pre-warmed runs + offline basemap fallback + error toasts |
+| **UX goal**            | Presenter reliability                                                                                                                                |
+| **IA change**          | Rail overlays console (dismissible = operational mode)                                                                                               |
+| **Design change**      | Rail chips styling                                                                                                                                   |
+| **Component change**   | Rail component + step state definitions                                                                                                              |
+| **Map change**         | Camera targets per step                                                                                                                              |
+| **Interaction change** | 1–8/R/Space/←→/Home/End                                                                                                                           |
+| **Motion change**      | Camera flyTo per step                                                                                                                                |
+| **API dependency**     | Existing (rail triggers existing state changes)                                                                                                      |
+| **Backend dependency** | None                                                                                                                                                 |
+| **Data dependency**    | Pre-warmed runs (T0.5)                                                                                                                               |
+| **Files**              | `web/app.js`, `web/index.html`, `web/style.css`, `public/app.js`, `public/index.html`, `public/style.css`                                |
+| **KEEP**               | Everything (rail adds, not replaces)                                                                                                                 |
+| **ADD**                | Rail, shortcuts, reset, basemap fallback, toast errors                                                                                               |
+| **Testing**            | Scripted Playwright pass of the full 8-step sequence                                                                                                 |
+| **Accessibility**      | Rail keyboard-operable; visible focus                                                                                                                |
+| **Performance**        | Step switch ≤ 300 ms                                                                                                                                |
+| **Demo impact**        | Critical — the whole rehearsal depends on it                                                                                                        |
+| **Risks**              | Rail becomes a second product → it only sets existing state; cap at 8 steps                                                                         |
+| **DoD**                | Full 4-minute script runs cold with ≤ 12 clicks                                                                                                     |
+| **Acceptance**         | 5 consecutive dry runs pass; each step has a rehearsed recovery                                                                                      |
 
 **Tasks:**
+
 - ✅ **T7.1 rail + step sequencer:** 8-chip floating presentation rail (`#demo-rail`) over `#map` with sequencer (`DEMO_STEPS`), chip indicators, dismissible operational mode toggle (`#rail-btn-hide` / `#rail-pill`), and prev/next clicker buttons (`#rail-btn-prev`, `#rail-btn-next`).
 - ✅ **T7.2 keyboard map:** Full single-keystroke presentation control: `1`–`8` moment jumps, `[` / `]` step navigation, `R` zero-state recovery, `Space` play/pause, `←` / `→` cycle stepping, `Home` / `End` T0/peak jumps, and `?` modal cheat-sheet (`#shortcuts-modal`).
 - ✅ **T7.3 basemap fallback + reset:** MapLibre GL error-resilient dark canvas fallback (`#0b0f14`) preventing blank voids during conference WiFi/tile drops, paired with smooth 800ms camera framing (`fitToEvent`).
@@ -312,16 +315,17 @@ T5.4 audit modal refinements (mode-gate consistency).
 
 ## Phase P8 — Accessibility, performance, polish *(after P4+P7)* — **COMPLETE & VERIFIED**
 
-| Field | Content |
-|---|---|
-| **Status** | ✅ **COMPLETE & VERIFIED** (Verified by `test_phase_8_accessibility_performance_and_polish` in `tests/test_v2_gis_console.py`) |
-| **Objective** | Zero a11y barriers, ≤ 50 ms/cycle UI render budget, deduplicated API fetches, and 1366×768 / 1920×1080 responsive QA matrix |
-| **Why** | Blueprint §15–§18; WCAG AA contrast and motion compliance; smooth timeline scrubbing |
-| **Current → target** | Unlabeled icon controls / uncached cycle fetches → full ARIA landmarks & labels, modal focus trapping, `prefers-reduced-motion` zero-snapping, in-memory LRU fetch deduplication |
-| **Files** | `web/index.html`, `web/style.css`, `web/app.js`, `public/index.html`, `public/style.css`, `public/app.js` |
-| **DoD** | Zero console errors; cycle render ≤ 50 ms; focus trap + restoration on all modals; 1366×768 and 1920×1080 layouts verified |
+| Field                       | Content                                                                                                                                                                            |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Status**            | ✅**COMPLETE & VERIFIED** (Verified by `test_phase_8_accessibility_performance_and_polish` in `tests/test_v2_gis_console.py`)                                            |
+| **Objective**         | Zero a11y barriers, ≤ 50 ms/cycle UI render budget, deduplicated API fetches, and 1366×768 / 1920×1080 responsive QA matrix                                                     |
+| **Why**               | Blueprint §15–§18; WCAG AA contrast and motion compliance; smooth timeline scrubbing                                                                                            |
+| **Current → target** | Unlabeled icon controls / uncached cycle fetches → full ARIA landmarks & labels, modal focus trapping,`prefers-reduced-motion` zero-snapping, in-memory LRU fetch deduplication |
+| **Files**             | `web/index.html`, `web/style.css`, `web/app.js`, `public/index.html`, `public/style.css`, `public/app.js`                                                              |
+| **DoD**               | Zero console errors; cycle render ≤ 50 ms; focus trap + restoration on all modals; 1366×768 and 1920×1080 layouts verified                                                      |
 
 **Tasks:**
+
 - ✅ **T8.1 a11y pass:** Skip-link (`<a href="#map" class="skip-link">`), ARIA landmarks (`banner`, `region`, `contentinfo`), focus trapping and restoration (`trapFocusInModal`, `_lastFocusedElement`), `aria-pressed` / `aria-current="step"` / `aria-hidden` state management, `≥ 6.5:1` secondary text contrast (`#94a3b8`), and `prefers-reduced-motion: reduce` CSS + JS camera duration zero-snapping (`getMotionDuration`).
 - ✅ **T8.2 perf profiling + dedupe:** In-flight GET request deduplication (`_inFlightGets`) and smart in-memory LRU caching (`_apiCache`, `isCacheableGet`, `clearApiCache`); shared singleton Web Audio context (`getSharedAudioContext`); cycle render budget profiling (`state._lastRenderMs ≤ 50ms`); defensive `pulseStormCell` helper guaranteeing zero console errors.
 - ✅ **T8.3 QA matrix:** Responsive media queries for 1366×768 conference projectors (`@media (max-width: 1400px)` & `@media (max-height: 800px)`) and 1920×1080 HD; verified across 3 canonical events (`bihar_squall_2026`, `himalayan_cloudburst_2026`, `sevir_s810646`) and 3 presets (`OBSERVE`, `NOWCAST`, `COMPARE`).
@@ -330,16 +334,17 @@ T5.4 audit modal refinements (mode-gate consistency).
 
 ## Phase P9 — Final presentation readiness — **COMPLETE & VERIFIED**
 
-| Field | Content |
-|---|---|
-| **Status** | ✅ **COMPLETE & VERIFIED** (All readiness checklist items & end-to-end API/UI contracts verified by `test_phase_9_final_presentation_readiness_and_e2e_contracts`) |
-| **Objective** | Align rehearsal script (`docs/DEMO.md`) and `MASTER.md` with verified capabilities, verify CAP/Atom/Bulletin/Scoreboard end-to-end, and freeze synchronized assets |
-| **Why** | Blueprint §13 & §18; zero assertion without demonstration |
-| **Current → target** | Legacy script metrics & wall-clock bulletin filter → 8-moment rail playbook synced to `MASTER.md` §4/§6/§7, replay-window bulletin matching (`valid_from <= t_utc <= valid_until`), and verified `alerts_count` in scoreboard |
-| **Files** | `docs/DEMO.md`, `MASTER.md`, `docs/FRONTEND_IMPLEMENTATION_PLAN.md`, `src/vajra/api/app.py`, `web/app.js`, `public/app.js`, `tests/test_v2_gis_console.py` |
-| **DoD** | All 7 final readiness checklist gates checked and backed by automated tests; `web/` and `public/` 100% byte-identical |
+| Field                       | Content                                                                                                                                                                                                                                |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Status**            | ✅**COMPLETE & VERIFIED** (All readiness checklist items & end-to-end API/UI contracts verified by `test_phase_9_final_presentation_readiness_and_e2e_contracts`)                                                              |
+| **Objective**         | Align rehearsal script (`docs/DEMO.md`) and `MASTER.md` with verified capabilities, verify CAP/Atom/Bulletin/Scoreboard end-to-end, and freeze synchronized assets                                                                 |
+| **Why**               | Blueprint §13 & §18; zero assertion without demonstration                                                                                                                                                                            |
+| **Current → target** | Legacy script metrics & wall-clock bulletin filter → 8-moment rail playbook synced to`MASTER.md` §4/§6/§7, replay-window bulletin matching (`valid_from <= t_utc <= valid_until`), and verified `alerts_count` in scoreboard |
+| **Files**             | `docs/DEMO.md`, `MASTER.md`, `docs/FRONTEND_IMPLEMENTATION_PLAN.md`, `src/vajra/api/app.py`, `web/app.js`, `public/app.js`, `tests/test_v2_gis_console.py`                                                               |
+| **DoD**               | All 7 final readiness checklist gates checked and backed by automated tests;`web/` and `public/` 100% byte-identical                                                                                                               |
 
 **Tasks:**
+
 - ✅ **T9.1 demo-script alignment:** `docs/DEMO.md` updated to map directly to the 8 Presentation Rail moments (`① ORIENT` to `⑧ AUDIT`), single-keystroke presentation controls (`1`–`8`, clicker `[` / `]`, recovery `R`), and verified SEVIR `S810646` benchmark metrics (`BSS +0.498` full event / `+0.374` live 25-cycle cell settlement, `CSI 0.502` / `0.433`, `POD 0.521` / `0.446`, `FAR 0.082` / `0.065`, `ROC-AUC 0.932`).
 - ✅ **T9.2 capability gating & end-to-end contract verification:** Honest narration of the 5-rung fallback ladder (`FULL_FUSION` → `REDUCED_MODALITY` → `PHYSICS_BASELINE` → `PERSISTENCE` → `CLIMATOLOGY`) and canonical 44-district / 148-block spatial index (Patna sub-districts Phulwari, Danapur, Patna Sadar, Sampatchak, Bihta); fixed `/api/v1/forecasts/{fid}/bulletin` replay time-window matching (`valid_from`/`valid_until`) and `/api/v1/runs/{run_id}/scoreboard` `alerts_count` resolution so printable bulletins, CAP 1.2 XML/JSON exports, Atom 1.0 feeds, and scoreboards work seamlessly on every replay cycle.
 - ✅ **T9.3 synchronization & freeze:** Synchronized `web/` and `public/` assets byte-for-byte; verified clean state with full automated regression suite.
@@ -370,23 +375,23 @@ P6 (after P2).
 
 ## Phase validation (per persona)
 
-| Persona | Validated by |
-|---|---|
-| First-time user | 30-second test passes at zero interaction (P0/P2/P3) |
-| Presenter | 4-minute script ≤ 12 clicks with recoveries (P7) |
-| Judge | All 8 moments land; no fabricated numbers anywhere (P0/P5) |
-| Meteorologist | Correct encoding semantics, palette separation, honest rung narration (P3/P4) |
-| ML reviewer | Model provenance, reliability chart, mode-gated claims (P5) |
+| Persona         | Validated by                                                                  |
+| --------------- | ----------------------------------------------------------------------------- |
+| First-time user | 30-second test passes at zero interaction (P0/P2/P3)                          |
+| Presenter       | 4-minute script ≤ 12 clicks with recoveries (P7)                             |
+| Judge           | All 8 moments land; no fabricated numbers anywhere (P0/P5)                    |
+| Meteorologist   | Correct encoding semantics, palette separation, honest rung narration (P3/P4) |
+| ML reviewer     | Model provenance, reliability chart, mode-gated claims (P5)                   |
 
 ## Acceptance criteria (global)
 
 1. All four audit P0 defects fixed with tests. 2. Zero state = populated storm-zoomed
-scene ≤ 8 s cold. 3. Alerts visible during replay with correct IMD staging; DDMA never
-contradicts the map. 4. Probability field visible at event zoom in NOWCAST preset.
-5. Scoreboard renders no invented values; benchmark numbers carry mode provenance.
-6. Settled per-alert verdicts appear on the SEVIR benchmark event. 7. Judge-seat
-legibility at 1366×768 (print test). 8. Zero console errors; render ≤ 50 ms/cycle.
-9. Offline basemap fallback verified. 10. Demo script passes 5 consecutive dry runs.
+   scene ≤ 8 s cold. 3. Alerts visible during replay with correct IMD staging; DDMA never
+   contradicts the map. 4. Probability field visible at event zoom in NOWCAST preset.
+2. Scoreboard renders no invented values; benchmark numbers carry mode provenance.
+3. Settled per-alert verdicts appear on the SEVIR benchmark event. 7. Judge-seat
+   legibility at 1366×768 (print test). 8. Zero console errors; render ≤ 50 ms/cycle.
+4. Offline basemap fallback verified. 10. Demo script passes 5 consecutive dry runs.
 
 ## Risks & mitigations
 
@@ -408,10 +413,10 @@ claims; no exact strike-point localization; no mobile-first redesign (demo targe
 
 ## Final readiness checklist
 
-- [x] P0–P9 definition-of-done met, tests green
-- [x] 30-second test recorded at 1366 and 1920
-- [x] 4-minute script dry run ×5, ≤ 12 clicks, recoveries rehearsed
-- [x] Scoreboard verified on `sevir_s810646` (BSS/FAR/POD/CSI match MASTER.md §6 story)
-- [x] CAP XML/JSON + Atom + bulletin print verified end-to-end once more
-- [x] Offline boot rehearsal passes
-- [x] `docs/DEMO.md` synced to verified capabilities; MASTER.md pointer present
+- [X] P0–P9 definition-of-done met, tests green
+- [X] 30-second test recorded at 1366 and 1920
+- [X] 4-minute script dry run ×5, ≤ 12 clicks, recoveries rehearsed
+- [X] Scoreboard verified on `sevir_s810646` (BSS/FAR/POD/CSI match MASTER.md §6 story)
+- [X] CAP XML/JSON + Atom + bulletin print verified end-to-end once more
+- [X] Offline boot rehearsal passes
+- [X] `docs/DEMO.md` synced to verified capabilities; MASTER.md pointer present

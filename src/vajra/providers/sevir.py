@@ -27,7 +27,11 @@ except ImportError:
     h5py = None
 
 import numpy as np
-import pandas as pd
+
+try:
+    import pandas as pd
+except Exception:
+    pd = None
 
 try:
     import s3fs

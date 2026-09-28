@@ -32,7 +32,7 @@ const map = new maplibregl.Map({
     sources: {
       basemap: {
         type: "raster",
-        tiles: [cartoTiles("dark_all")],
+        tiles: [cartoTiles("light_all")],
         tileSize: 256, attribution: "© OpenStreetMap contributors, © CARTO",
       },
     },
@@ -46,13 +46,13 @@ map.once("load", async () => {
   const key = await basemapKeyPromise;
   if (key) {
     map.getSource("basemap").setTiles(
-      [`${cartoTiles("dark_all")}?key=${encodeURIComponent(key)}`]);
+      [`${cartoTiles("light_all")}?key=${encodeURIComponent(key)}`]);
   }
 });
 map.on("error", (e) => {
   if (e && e.error && e.error.status === 404) return;
   const mapEl = document.getElementById("map");
-  if (mapEl) mapEl.style.backgroundColor = "#0b0f14";
+  if (mapEl) mapEl.style.backgroundColor = "#f1f5f9";
 });
 
 const PLACEHOLDER_PNG =
@@ -80,16 +80,16 @@ map.on("load", () => {
   map.addSource("cells", { type: "geojson", data: emptyFC() });
   map.addLayer({
     id: "cells-layer", type: "line", source: "cells",
-    paint: { "line-color": "#ffd166", "line-width": 2 },
+    paint: { "line-color": "#d97706", "line-width": 2.5 },
   });
   map.addLayer({
     id: "cells-fill", type: "fill", source: "cells",
-    paint: { "fill-color": "#ffd166", "fill-opacity": ["case", ["boolean", ["feature-state", "hover"], false], 0.18, 0.06] },
+    paint: { "fill-color": "#f59e0b", "fill-opacity": ["case", ["boolean", ["feature-state", "hover"], false], 0.22, 0.08] },
   });
   map.addSource("flashes", { type: "geojson", data: emptyFC() });
   map.addLayer({
     id: "flashes-layer", type: "circle", source: "flashes",
-    paint: { "circle-radius": 3.2, "circle-color": "#ffffff", "circle-stroke-color": "#93c5fd", "circle-stroke-width": 1 },
+    paint: { "circle-radius": 3.5, "circle-color": "#2563eb", "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5 },
   });
 
   // Convective Initiation (precursor) candidates
@@ -483,18 +483,21 @@ async function loadEventReplay(eventId) {
   if ($("run-btn")) $("run-btn").disabled = true;
   try {
     const runs = await api("/runs").catch(() => []);
-    const existing = Array.isArray(runs) ? runs.find((r) => r.event_id === eventId) : null;
-    if (existing && existing.run_id) {
-      state.runId = existing.run_id;
-      if ($("run-status")) $("run-status").textContent = `Run ${existing.run_id}: ${existing.cycles} cycles, ${existing.alerts} alerts.`;
+    const matching = Array.isArray(runs) ? runs.filter((r) => r.event_id === eventId) : [];
+    matching.sort((a, b) => (b.cycles || 0) - (a.cycles || 0));
+    const existing = matching[0] || null;
+    const existingRunId = (existing && (existing.cycles || 0) > 0) ? (existing.run_id || existing.id) : null;
+    if (existingRunId) {
+      state.runId = existingRunId;
+      if ($("run-status")) $("run-status").textContent = `Run ${existingRunId}: ${existing.cycles || 0} cycles, ${existing.alerts || 0} alerts.`;
       await loadRun();
       return;
     }
 
     if ($("run-status")) $("run-status").textContent = `Running replay for ${eventId}…`;
     const res = await api(`/replay/${encodeURIComponent(eventId)}/run`, { method: "POST" });
-    state.runId = res.run_id;
-    if ($("run-status")) $("run-status").textContent = `Run ${res.run_id}: ${res.cycles} cycles, ${res.alerts} alerts.`;
+    state.runId = res.run_id || res.id;
+    if ($("run-status")) $("run-status").textContent = `Run ${state.runId}: ${res.cycles || 0} cycles, ${res.alerts || 0} alerts.`;
     await loadRun();
   } catch (e) {
     if ($("run-status")) $("run-status").textContent = `Failed: ${e.message}`;
@@ -522,9 +525,9 @@ async function loadRun() {
   });
   state.index = peakIdx;
   state.peakIdx = peakIdx;
-  const run = await api(`/runs/${state.runId}`);
-  state.runVerification = run.verification;
-  state.flashes = await api(`/events/${encodeURIComponent(state.eventId)}/flashes.geojson`);
+  const run = await api(`/runs/${state.runId}`).catch(() => null);
+  state.runVerification = run ? run.verification : null;
+  state.flashes = await api(`/events/${encodeURIComponent(state.eventId)}/flashes.geojson`).catch(() => ({ type: "FeatureCollection", features: [] }));
   // Flash epoch contract: the API serves seconds; every UI comparison is in ms.
   // Normalize once at load so the map layer and verdict checks share one unit.
   for (const ft of (state.flashes.features || [])) {
@@ -537,7 +540,9 @@ async function loadRun() {
   initTimelineAxis();
   renderVerifyStrip();
   renderStep();
-  await fitToEvent();
+  renderFullVerificationPage();
+  renderRadarPage();
+  await fitToEvent().catch(() => {});
 }
 
 // Fit the camera to the storm footprint (cells of the current cycle), padded —
@@ -1179,13 +1184,17 @@ function enterCompare() {
   const f = currentForecast();
   if (f) getGridBounds(f.id).then((coords) => {
     compareBounds = coords;
-    updateCompareDivider(parseFloat($("compare-slider").value) / 100);
+    const slider = $("compare-slider");
+    const frac = slider ? parseFloat(slider.value) / 100 : 0.5;
+    updateCompareDivider(isNaN(frac) ? 0.5 : frac);
   }).catch(() => { compareBounds = null; });
 }
 
 function updateCompareDivider(frac) {
-  const maxProb = parseInt($("lyr-prob-opacity").value, 10) / 100;
-  if (map.getLayer("prob-layer")) map.setPaintProperty("prob-layer", "raster-opacity", frac * maxProb);
+  const op = $("lyr-prob-opacity");
+  const maxProb = op ? (parseInt(op.value, 10) / 100) : 0.92;
+  const validMaxProb = isNaN(maxProb) ? 0.92 : maxProb;
+  if (map.getLayer("prob-layer")) map.setPaintProperty("prob-layer", "raster-opacity", frac * validMaxProb);
   if (map.getLayer("obs-layer")) map.setPaintProperty("obs-layer", "raster-opacity", (1 - frac) * 0.85);
   const val = $("compare-val");
   if (val) val.textContent = `${Math.round(frac * 100)}% NOWCAST / ${Math.round((1 - frac) * 100)}% OBS`;
@@ -1664,6 +1673,8 @@ async function renderAlerts(f) {
       <div class="muted small" style="margin-top:4px;">model ${a.model_version} · mode ${a.mode} · confidence ${a.confidence}</div>
     </div>`;
   }).join("");
+
+  renderFullAlertsPage();
 }
 $("preset-select").onchange = () => { state._markerKey = null; renderTimelineMarkers(); renderStep(); };
 
@@ -1871,98 +1882,95 @@ if ($("vs-audit")) {
   };
 }
 
-async function openScoreboardModal() {
-  try {
-    const data = await api(`/runs/${state.runId}/scoreboard`);
-    const metrics = data.metrics || {};
-    const samples = data.sample_counts || {};
-    const baselines = data.baselines || {};
-    const cs = data.case_study || null;
+function generateScoreboardHtml(data) {
+  const metrics = data.metrics || {};
+  const samples = data.sample_counts || {};
+  const baselines = data.baselines || {};
+  const cs = data.case_study || null;
 
-    const lead30 = metrics["30"] || {};
-    const lead60 = metrics["60"] || {};
-    const primaryLead = metrics["60"] ? "60" : "30";
-    const primaryMetrics = metrics[primaryLead] || lead30;
-    const relCurve = primaryMetrics.reliability || [];
-    const murphy = primaryMetrics.murphy || {};
+  const lead30 = metrics["30"] || {};
+  const lead60 = metrics["60"] || {};
+  const primaryLead = metrics["60"] ? "60" : "30";
+  const primaryMetrics = metrics[primaryLead] || lead30;
+  const relCurve = primaryMetrics.reliability || [];
+  const murphy = primaryMetrics.murphy || {};
 
-    const container = $("scoreboard-content");
-    container.innerHTML = `
-      <div style="background:#1f2937;padding:14px;border-radius:6px;margin-bottom:14px;border:1px solid #374151;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
-          <div>
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-              <span class="badge badge-mode" data-mode="${data.mode}">${data.mode}</span>
-              <span style="font-weight:700;color:#f3f4f6;font-size:14px;">${cs ? cs.title : `Run Audit: ${data.run_id}`}</span>
-            </div>
-            <div class="small muted">
-              Event ID: <code>${data.event_id}</code> · Cycles: <strong>${data.cycles}</strong> · Alerts: <strong>${data.alerts_count}</strong> · Evaluated vs: <strong>GLM / ISS-LIS Flash Truth</strong>
-            </div>
+  return `
+    <div style="background:#f8fafc;padding:16px;border-radius:8px;margin-bottom:16px;border:1px solid #e2e8f0;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <span class="badge badge-mode" data-mode="${data.mode}">${data.mode}</span>
+            <span style="font-weight:800;color:#0f172a;font-size:16px;">${cs ? cs.title : `Run Audit: ${data.run_id}`}</span>
           </div>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <div style="text-align:right;">
-              <div class="small muted" style="font-size:10px;">BSS vs CLIMATOLOGY (+${primaryLead}m)</div>
-              <span class="score-badge ${primaryMetrics.bss > 0 ? 'score-good' : 'score-mod'}" style="font-size:13px;padding:3px 8px;">${fmt(primaryMetrics.bss)}</span>
-            </div>
-            <div style="text-align:right;">
-              <div class="small muted" style="font-size:10px;">ROC-AUC (+${primaryLead}m)</div>
-              <span class="score-badge ${primaryMetrics.roc_auc != null ? 'score-good' : 'score-mod'}" style="font-size:13px;padding:3px 8px;">${fmt(primaryMetrics.roc_auc)}</span>
-            </div>
+          <div class="small text-slate-600">
+            Event ID: <code>${data.event_id}</code> · Cycles: <strong>${data.cycles}</strong> · Alerts Issued: <strong>${data.alerts_count}</strong> · Evaluation Sensor: <strong>GLM / ISS-LIS Flash Truth</strong>
           </div>
         </div>
-
-        ${cs ? `
-          <div style="margin-top:10px;padding-top:10px;border-top:1px solid #374151;font-size:11px;color:#d1d5db;line-height:1.4;">
-            <strong>Synoptic Narrative:</strong> ${cs.synoptic_narrative}
+        <div style="display:flex;gap:12px;align-items:center;">
+          <div style="text-align:right;">
+            <div class="small muted" style="font-size:10px;font-weight:700;">BSS vs CLIMATOLOGY (+${primaryLead}m)</div>
+            <span class="badge" style="font-size:14px;padding:3px 10px;background:${primaryMetrics.bss > 0 ? '#dcfce7' : '#fee2e2'};color:${primaryMetrics.bss > 0 ? '#166534' : '#991b1b'};font-weight:800;border:1px solid ${primaryMetrics.bss > 0 ? '#86efac' : '#fca5a5'};">${fmt(primaryMetrics.bss)}</span>
           </div>
-        ` : ''}
+          <div style="text-align:right;">
+            <div class="small muted" style="font-size:10px;font-weight:700;">ROC-AUC (+${primaryLead}m)</div>
+            <span class="badge" style="font-size:14px;padding:3px 10px;background:#dbeafe;color:#1e40af;font-weight:800;border:1px solid #bfdbfe;">${fmt(primaryMetrics.roc_auc)}</span>
+          </div>
+        </div>
       </div>
 
-      ${cs && cs.imd_bulletin ? `
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
-          <div style="background:#18181b;padding:12px;border-radius:6px;border-left:3px solid #eab308;font-size:11px;">
-            <div style="font-weight:700;color:#facc15;margin-bottom:4px;display:flex;justify-content:space-between;">
-              <span>🏛️ Official IMD Text Bulletin Baseline</span>
-              <span class="badge" style="background:#854d0e;color:#fef08a;font-size:9px;">${cs.imd_bulletin.imd_color_code}</span>
-            </div>
-            <div style="color:#9ca3af;font-size:10px;margin-bottom:6px;">ID: ${cs.imd_bulletin.bulletin_id} · Valid: ${cs.imd_bulletin.valid_until}</div>
-            <p style="font-style:italic;color:#e4e4e7;margin:0 0 6px 0;line-height:1.35;">"${cs.imd_bulletin.bulletin_text}"</p>
-            <div style="color:#a1a1aa;font-size:10px;">
-              <strong>Limitations:</strong> ${cs.imd_bulletin.spatial_precision} ${cs.imd_bulletin.temporal_latency}
-            </div>
-          </div>
-
-          <div style="background:#18181b;padding:12px;border-radius:6px;border-left:3px solid #0284c7;font-size:11px;">
-            <div style="font-weight:700;color:#38bdf8;margin-bottom:4px;display:flex;justify-content:space-between;">
-              <span>⚡ Project Vajra Convective Intelligence</span>
-              <span class="badge" style="background:#0369a1;color:#e0f2fe;font-size:9px;">DUAL-TRACK AI</span>
-            </div>
-            <div style="color:#9ca3af;font-size:10px;margin-bottom:6px;">Lead Horizon: +30m &amp; +60m · 12 km Block Convection Bounds</div>
-            <p style="color:#e4e4e7;margin:0 0 6px 0;line-height:1.35;">
-              Calibrated cell-level probability fields with localized block alerts, 45-min suppression, and automated CAP 1.2 XML/JSON dispatch.
-            </p>
-            <div style="color:#38bdf8;font-size:10px;">
-              <strong>Advantage:</strong> Block-level targeting cuts false alarms by >45% relative to district blanket advisories.
-            </div>
-          </div>
+      ${cs ? `
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:12px;color:#334155;line-height:1.5;">
+          <strong style="color:#0f172a;">Synoptic Narrative:</strong> ${cs.synoptic_narrative}
         </div>
       ` : ''}
+    </div>
 
-      ${data.mode === "SIMULATION" ? `
-        <div style="background:#3f2d10;border:1px solid #7a5c14;color:#fcd34d;padding:10px 12px;border-radius:6px;font-size:11px;margin-bottom:14px;">
-          <strong>Honesty note:</strong> this is a SIMULATION run — it exercises the full pipeline end-to-end but carries
-          <strong>no skill claim</strong>. Calibrated-skill benchmarks (BSS / POD / FAR) are computed on the held-out
-          SEVIR REPLAY event with the trained model; select
-          “SEVIR Held-Out Benchmark Tornadic Squall Line (S810646)” and run it to see the scoreboard that counts.
-        </div>` : ''}
+    ${cs && cs.imd_bulletin ? `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+        <div style="background:#fefce8;padding:14px;border-radius:8px;border-left:4px solid #ca8a04;border:1px solid #fef08a;font-size:12px;">
+          <div style="font-weight:800;color:#854d0e;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+            <span>🏛️ Official IMD Text Bulletin Baseline</span>
+            <span class="badge" style="background:#ca8a04;color:#ffffff;font-size:10px;">${cs.imd_bulletin.imd_color_code}</span>
+          </div>
+          <div style="color:#854d0e;font-size:11px;margin-bottom:8px;">ID: ${cs.imd_bulletin.bulletin_id} · Valid Until: ${cs.imd_bulletin.valid_until}</div>
+          <p style="font-style:italic;color:#334155;margin:0 0 8px 0;line-height:1.45;background:#ffffff;padding:8px 10px;border-radius:4px;border:1px solid #fef08a;">"${cs.imd_bulletin.bulletin_text}"</p>
+          <div style="color:#713f12;font-size:11px;">
+            <strong>Baseline Gaps:</strong> ${cs.imd_bulletin.spatial_precision} ${cs.imd_bulletin.temporal_latency}
+          </div>
+        </div>
 
-      <h5 style="margin:0 0 6px 0;color:#9ca3af;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">
-        1. Forecast Horizon Verification Scorecard (GLM / ISS-LIS Verified)
-      </h5>
-      <table class="verif" style="width:100%;margin-bottom:14px;">
+        <div style="background:#eff6ff;padding:14px;border-radius:8px;border-left:4px solid #2563eb;border:1px solid #bfdbfe;font-size:12px;">
+          <div style="font-weight:800;color:#1e40af;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+            <span>⚡ Project Vajra Convective Intelligence</span>
+            <span class="badge" style="background:#2563eb;color:#ffffff;font-size:10px;">DUAL-TRACK AI</span>
+          </div>
+          <div style="color:#1d4ed8;font-size:11px;margin-bottom:8px;">Lead Horizon: +30m &amp; +60m · 12 km Block Convection Bounds</div>
+          <p style="color:#334155;margin:0 0 8px 0;line-height:1.45;background:#ffffff;padding:8px 10px;border-radius:4px;border:1px solid #bfdbfe;">
+            Calibrated cell-level probability fields with localized block alerts, 45-min suppression, and automated CAP 1.2 XML/JSON dispatch.
+          </p>
+          <div style="color:#1e40af;font-size:11px;">
+            <strong>Operational Value:</strong> Block-level targeting cuts false alarms by &gt;45% relative to district blanket advisories.
+          </div>
+        </div>
+      </div>
+    ` : ''}
+
+    ${data.mode === "SIMULATION" ? `
+      <div style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;padding:12px 14px;border-radius:6px;font-size:12px;margin-bottom:16px;">
+        <strong>Honesty note:</strong> this is a SIMULATION run — it exercises the full pipeline end-to-end but carries
+        <strong>no skill claim</strong>. Calibrated-skill benchmarks (BSS / POD / FAR) are computed on the held-out
+        SEVIR REPLAY event with the trained model; select “SEVIR Held-Out Benchmark Tornadic Squall Line (S810646)” to view verified skill.
+      </div>` : ''}
+
+    <h4 style="margin:0 0 8px 0;color:#0f172a;font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;">
+      1. Forecast Horizon Verification Scorecard (GLM / ISS-LIS Ground Truth)
+    </h4>
+    <div class="table-responsive" style="margin-bottom:18px;">
+      <table class="data-table" style="background:#ffffff;">
         <thead>
-          <tr style="background:#111827;">
-            <th style="padding:6px 8px;">Horizon</th>
+          <tr>
+            <th>Horizon</th>
             <th>Samples (n)</th>
             <th>POD (Hit Rate)</th>
             <th>FAR (False Alarm)</th>
@@ -1976,32 +1984,34 @@ async function openScoreboardModal() {
         <tbody>
           ${Object.entries(metrics).map(([lead, m]) => {
             const bssVal = m.bss;
-            const bssClass = bssVal > 0 ? "score-good" : "score-mod";
+            const bssClass = bssVal > 0 ? "color:#166534;background:#dcfce7;" : "color:#991b1b;background:#fee2e2;";
             return `
               <tr>
-                <td style="font-weight:700;color:#38bdf8;padding:6px 8px;">+${lead} Minutes</td>
+                <td style="font-weight:800;color:#2563eb;">+${lead} Minutes</td>
                 <td>${m.n || samples[lead] || '—'}</td>
                 <td><strong>${fmt(m.pod)}</strong></td>
                 <td>${fmt(m.far)}</td>
                 <td><strong>${fmt(m.csi)}</strong></td>
                 <td>${fmt(m.brier_score)}</td>
-                <td><span class="score-badge ${bssClass}">${fmt(m.bss)}</span></td>
+                <td><span class="badge" style="${bssClass};font-weight:800;">${fmt(m.bss)}</span></td>
                 <td>${fmt(m.roc_auc)}</td>
-                <td><span style="color:#22c55e;font-weight:600;font-size:10px;">${m.is_monotone ? '✓ PASS' : '≈ EMPIRICAL'}</span></td>
+                <td><span style="color:#166534;font-weight:700;font-size:11px;">${m.is_monotone ? '✓ PASS' : '≈ EMPIRICAL'}</span></td>
               </tr>
             `;
-          }).join('') || '<tr><td colspan="9" class="muted">No verification samples yet</td></tr>'}
+          }).join('') || '<tr><td colspan="9" class="muted text-center py-4">No verification samples yet</td></tr>'}
         </tbody>
       </table>
+    </div>
 
-      ${Object.keys(baselines).length ? `
-        <h5 style="margin:0 0 6px 0;color:#9ca3af;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">
-          2. Benchmark Comparison Matrix: Project Vajra vs 5 Baselines (+${primaryLead}m)
-        </h5>
-        <table class="verif" style="width:100%;margin-bottom:14px;">
+    ${Object.keys(baselines).length ? `
+      <h4 style="margin:0 0 8px 0;color:#0f172a;font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;">
+        2. Benchmark Comparison Matrix: Project Vajra vs 5 Baselines (+${primaryLead}m)
+      </h4>
+      <div class="table-responsive" style="margin-bottom:18px;">
+        <table class="data-table" style="background:#ffffff;">
           <thead>
-            <tr style="background:#111827;">
-              <th style="padding:6px 8px;">Model Architecture</th>
+            <tr>
+              <th>Model Architecture</th>
               <th>POD</th>
               <th>FAR</th>
               <th>CSI</th>
@@ -2013,18 +2023,18 @@ async function openScoreboardModal() {
           <tbody>
             ${Object.entries(baselines).map(([k, b]) => {
               const isVajra = k === "vajra";
-              const rowStyle = isVajra ? "background:rgba(2, 132, 199, 0.15);font-weight:700;" : "";
+              const rowStyle = isVajra ? "background:#eff6ff;font-weight:700;" : "";
               const hasBss = b.bss != null && Number.isFinite(+b.bss);
               const verdictBadge = !hasBss
-                ? '<span class="badge" style="background:#4b5563;color:#e5e7eb;">NOT SCORED</span>'
+                ? '<span class="badge" style="background:#f1f5f9;color:#64748b;">NOT SCORED</span>'
                 : (isVajra
-                  ? '<span class="badge" style="background:#15803d;color:#dcfce7;">SUPERIOR (Candidate)</span>'
-                  : (k.includes('climo') ? '<span class="badge" style="background:#4b5563;color:#e5e7eb;">BENCHMARK FLOOR</span>' : '<span class="badge" style="background:#b91c1c;color:#fee2e2;">DEFICIENT</span>'));
+                  ? '<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #86efac;">SUPERIOR (Candidate)</span>'
+                  : (k.includes('climo') ? '<span class="badge" style="background:#f1f5f9;color:#475569;">BENCHMARK FLOOR</span>' : '<span class="badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;">DEFICIENT</span>'));
               return `
                 <tr style="${rowStyle}">
-                  <td style="padding:6px 8px;color:${isVajra ? '#38bdf8' : '#e5e7eb'};">
-                    ${b.name}
-                    <div style="font-size:10px;font-weight:normal;color:#9ca3af;">${b.description}</div>
+                  <td style="color:${isVajra ? '#1d4ed8' : '#0f172a'};">
+                    <strong>${b.name}</strong>
+                    <div style="font-size:11px;font-weight:normal;color:#64748b;">${b.description}</div>
                   </td>
                   <td>${fmt(b.pod)}</td>
                   <td>${fmt(b.far)}</td>
@@ -2037,16 +2047,18 @@ async function openScoreboardModal() {
             }).join('')}
           </tbody>
         </table>
-      ` : ''}
+      </div>
+    ` : ''}
 
-      ${relCurve.length ? `
-        <h5 style="margin:0 0 6px 0;color:#9ca3af;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">
-          3. Reliability &amp; Sharpness Distribution (+${primaryLead}m Horizon)
-        </h5>
-        <table class="verif" style="width:100%;margin-bottom:14px;">
+    ${relCurve.length ? `
+      <h4 style="margin:0 0 8px 0;color:#0f172a;font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;">
+        3. Reliability &amp; Sharpness Distribution (+${primaryLead}m Horizon)
+      </h4>
+      <div class="table-responsive" style="margin-bottom:18px;">
+        <table class="data-table" style="background:#ffffff;">
           <thead>
-            <tr style="background:#111827;">
-              <th style="padding:6px 8px;">Probability Decile</th>
+            <tr>
+              <th>Probability Decile</th>
               <th>Sample Count (n)</th>
               <th>Sharpness (%)</th>
               <th>Forecast Mean P̄</th>
@@ -2059,34 +2071,43 @@ async function openScoreboardModal() {
               const diff = (b.forecast_mean != null && b.observed_freq != null) ? Math.abs(b.forecast_mean - b.observed_freq) : null;
               return `
                 <tr>
-                  <td style="font-weight:600;padding:6px 8px;color:#cbd5e1;">${b.bin}</td>
+                  <td style="font-weight:700;color:#0f172a;">${b.bin}</td>
                   <td>${b.n}</td>
                   <td>${(b.sharpness * 100).toFixed(1)}%</td>
                   <td>${fmt(b.forecast_mean)}</td>
                   <td><strong>${fmt(b.observed_freq)}</strong></td>
-                  <td style="color:${diff != null && diff < 0.15 ? '#22c55e' : '#f97316'};">${fmt(diff)}</td>
+                  <td style="color:${diff != null && diff < 0.15 ? '#166534' : '#ea580c'};font-weight:700;">${fmt(diff)}</td>
                 </tr>
               `;
             }).join('')}
           </tbody>
         </table>
-        ${murphy.reliability != null ? `
-          <div style="font-size:10px;color:#9ca3af;margin-bottom:12px;background:#111827;padding:8px 12px;border-radius:4px;border:1px solid #374151;">
-            <strong>Murphy (1973) Brier Score Decomposition:</strong>
-            BS (${fmt(murphy.brier_score)}) = Reliability (${fmt(murphy.reliability)}) - Resolution (${fmt(murphy.resolution)}) + Uncertainty (${fmt(murphy.uncertainty)})
-          </div>
-        ` : ''}
-      ` : ''}
-
-      <div style="background:#111827;padding:10px;border-radius:6px;font-size:10px;color:#9ca3af;border:1px solid #374151;line-height:1.4;">
-        <strong>Rigorous Scientific Verification Compliance (MASTER.md §8 &amp; D8):</strong><br/>
-        • <strong>Ground Truth:</strong> Satellite optical lightning detections (GLM / NASA ISS-LIS) strictly occurring inside (t, t+lead].<br/>
-        • <strong>Brier Skill Score (BSS):</strong> Calculated relative to the calibrated climatological base rate: <code>BSS = 1 - (BS_vajra / BS_climo)</code>.<br/>
-        • <strong>Monotonicity Guarantee:</strong> Isotonic PAVA calibration ensures observed lightning frequency increases monotonically with forecast probability.<br/>
-        • <strong>Zero Hallucination Guarantee:</strong> All verification metrics reflect genuine physical storm tracks without post-hoc cherry-picking.
       </div>
-    `;
+      ${murphy.reliability != null ? `
+        <div style="font-size:11px;color:#475569;margin-bottom:14px;background:#f8fafc;padding:10px 14px;border-radius:6px;border:1px solid #e2e8f0;">
+          <strong style="color:#0f172a;">Murphy (1973) Brier Score Decomposition:</strong>
+          BS (${fmt(murphy.brier_score)}) = Reliability (${fmt(murphy.reliability)}) - Resolution (${fmt(murphy.resolution)}) + Uncertainty (${fmt(murphy.uncertainty)})
+        </div>
+      ` : ''}
+    ` : ''}
 
+    <div style="background:#f8fafc;padding:12px 16px;border-radius:6px;font-size:11px;color:#475569;border:1px solid #e2e8f0;line-height:1.5;">
+      <strong style="color:#0f172a;">Rigorous Scientific Verification Standards:</strong><br/>
+      • <strong>Ground Truth Sensor:</strong> Satellite optical lightning detections (GLM / NASA ISS-LIS) strictly occurring within (t, t+lead].<br/>
+      • <strong>Brier Skill Score (BSS):</strong> Calculated relative to the calibrated climatological base rate: <code>BSS = 1 - (BS_vajra / BS_climo)</code>.<br/>
+      • <strong>Monotonicity Guarantee:</strong> Isotonic PAVA calibration ensures observed lightning frequency increases monotonically with forecast probability.<br/>
+      • <strong>Zero Hallucination Guarantee:</strong> All verification metrics reflect genuine physical storm tracks without post-hoc cherry-picking.
+    </div>
+  `;
+}
+
+async function openScoreboardModal() {
+  try {
+    const data = state.scoreboard || await api(`/runs/${state.runId}/scoreboard`);
+    const container = $("scoreboard-content");
+    if (container) {
+      container.innerHTML = generateScoreboardHtml(data);
+    }
     _lastFocusedElement = document.activeElement;
     $("scoreboard-modal").classList.add("open");
     trapFocusInModal($("scoreboard-modal"));
@@ -2305,7 +2326,7 @@ const DEMO_STEPS = [
     run: async () => {
       setPersona("imd");
       closeModals();
-      const himalayan = (state.events || []).find((e) => e.id.includes("himalayan"));
+      const himalayan = (state.events || []).find((e) => (e.id || "").toLowerCase().includes("himalayan"));
       if (himalayan) {
         await loadEventReplay(himalayan.id);
       }
@@ -2322,7 +2343,7 @@ const DEMO_STEPS = [
     run: async () => {
       setPersona("imd");
       closeModals();
-      const sevir = (state.events || []).find((e) => e.id.includes("sevir"));
+      const sevir = (state.events || []).find((e) => (e.id || "").toLowerCase().includes("sevir"));
       if (sevir) {
         await loadEventReplay(sevir.id);
       }
@@ -2608,6 +2629,275 @@ window.locateAlertById = (alertId) => {
   if (target) locateAlert(target);
 };
 
+// ---------- multi-page router & navigation ----------
+state.activePage = "map";
+state.alertFilter = "all";
+state.alertSearch = "";
+
+function switchPage(pageId) {
+  const validPages = ["map", "alerts", "verify", "radar", "about"];
+  if (!validPages.includes(pageId)) pageId = "map";
+  state.activePage = pageId;
+
+  // Update tabs
+  document.querySelectorAll(".nav-tab").forEach((tab) => {
+    const isTarget = tab.dataset.page === pageId;
+    tab.classList.toggle("active", isTarget);
+    tab.setAttribute("aria-selected", String(isTarget));
+  });
+
+  // Update page visibility
+  document.querySelectorAll(".app-page").forEach((page) => {
+    const isTarget = page.id === `page-${pageId}`;
+    page.style.display = isTarget ? (pageId === "map" ? "flex" : "block") : "none";
+    page.classList.toggle("active", isTarget);
+  });
+
+  // Update URL hash safely without reload loops
+  if (window.location.hash !== `#/${pageId}`) {
+    history.replaceState(null, "", `#/${pageId}`);
+  }
+
+  // Page-specific updates
+  if (pageId === "map") {
+    setTimeout(() => {
+      if (map) map.resize();
+    }, 50);
+  } else if (pageId === "alerts") {
+    renderFullAlertsPage();
+  } else if (pageId === "verify") {
+    renderFullVerificationPage();
+  } else if (pageId === "radar") {
+    renderRadarPage();
+  }
+}
+window.switchPage = switchPage;
+
+window.locateAlertAndSwitchToMap = (alertId) => {
+  switchPage("map");
+  setTimeout(() => {
+    window.locateAlertById(alertId);
+  }, 100);
+};
+
+// Wire up nav tab clicks
+document.querySelectorAll(".nav-tab").forEach((tab) => {
+  tab.onclick = () => switchPage(tab.dataset.page);
+});
+
+// Listen to browser popstate / back-forward navigation
+window.addEventListener("popstate", () => {
+  const hash = (window.location.hash || "").replace(/^#\/?/, "");
+  if (hash && hash !== state.activePage) {
+    switchPage(hash);
+  }
+});
+
+function renderFullAlertsPage() {
+  const active = state.activeAlerts || [];
+  const redCount = active.filter((a) => a.imd_stage === "RED").length;
+  const orangeCount = active.filter((a) => a.imd_stage === "ORANGE").length;
+  const yellowCount = active.filter((a) => a.imd_stage === "YELLOW").length;
+  const totalPop = active.reduce((sum, a) => sum + (a.population_exposed || 0), 0);
+
+  if ($("alert-kpi-red")) $("alert-kpi-red").textContent = redCount;
+  if ($("alert-kpi-orange")) $("alert-kpi-orange").textContent = orangeCount;
+  if ($("alert-kpi-yellow")) $("alert-kpi-yellow").textContent = yellowCount;
+  if ($("alert-kpi-pop")) $("alert-kpi-pop").textContent = totalPop ? totalPop.toLocaleString() : "0";
+
+  // Update navigation badge
+  const navBadge = $("nav-alert-badge");
+  if (navBadge) {
+    navBadge.textContent = active.length;
+    navBadge.style.display = active.length > 0 ? "inline-block" : "none";
+  }
+
+  const tbody = $("full-alerts-tbody");
+  if (!tbody) return;
+
+  const countTag = $("alerts-table-count");
+  if (countTag) countTag.textContent = `${active.length} warnings in force`;
+
+  // Apply filters
+  let filtered = active;
+  if (state.alertFilter && state.alertFilter !== "all") {
+    filtered = filtered.filter((a) => a.imd_stage === state.alertFilter);
+  }
+  if (state.alertSearch && state.alertSearch.trim()) {
+    const q = state.alertSearch.toLowerCase().trim();
+    filtered = filtered.filter((a) => {
+      const dist = (a.district || (a.affected_districts || []).join(" ")).toLowerCase();
+      const blk = (a.affected_blocks || []).join(" ").toLowerCase();
+      const cid = (a.cell_id || "").toLowerCase();
+      return dist.includes(q) || blk.includes(q) || cid.includes(q);
+    });
+  }
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 muted">No warnings match current filter criteria.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map((a) => {
+    const stageColor = a.imd_stage === "RED" ? "var(--imd-red)" : (a.imd_stage === "ORANGE" ? "var(--imd-orange)" : "var(--imd-yellow)");
+    const stageBg = a.imd_stage === "RED" ? "var(--imd-red-bg)" : (a.imd_stage === "ORANGE" ? "var(--imd-orange-bg)" : "var(--imd-yellow-bg)");
+    const stageBorder = a.imd_stage === "RED" ? "var(--imd-red-border)" : (a.imd_stage === "ORANGE" ? "var(--imd-orange-border)" : "var(--imd-yellow-border)");
+    const distText = a.district || (a.affected_districts && a.affected_districts.length ? a.affected_districts.join(", ") : "Regional");
+    const blocksText = (a.affected_blocks && a.affected_blocks.length) ? a.affected_blocks.join(", ") : "Block-level tracking";
+    const pop = (a.population_exposed || 0).toLocaleString();
+    const prob = ((a.p_flash_max || 0) * 100).toFixed(0);
+    const validUntil = a.valid_until ? new Date(a.valid_until).toISOString().slice(11, 16) + "Z" : "+60m";
+
+    return `
+      <tr>
+        <td>
+          <span class="badge" style="background:${stageBg};color:${stageColor};border:1px solid ${stageBorder};font-weight:800;">
+            ${a.imd_stage}
+          </span>
+        </td>
+        <td>
+          <strong>${distText}</strong>
+          <div class="small muted">${blocksText}</div>
+        </td>
+        <td>
+          <strong style="color:${stageColor};font-size:14px;">${prob}%</strong>
+          <span class="small muted">P(&ge;1 flash)</span>
+        </td>
+        <td>
+          <strong>+${a.lead_minutes || 60}m</strong>
+          <div class="small muted">until ${validUntil}</div>
+        </td>
+        <td><strong>${pop}</strong></td>
+        <td><code>${a.cell_id || '—'}</code></td>
+        <td style="max-width:260px;">
+          <div class="small font-semibold text-slate-800">${a.headline || 'Lightning Threat Warning'}</div>
+          <div class="small text-slate-600">${a.instruction || 'Take immediate shelter in substantial building.'}</div>
+        </td>
+        <td>
+          <div style="display:flex;gap:4px;">
+            <button class="small-btn primary" onclick="locateAlertAndSwitchToMap('${a.id}')" title="Locate on interactive map">🎯 Map</button>
+            <button class="small-btn outline-btn" onclick="openBulletinModal(currentForecast()?.id, '${a.id}')" title="Generate printable bulletin">📄 Bulletin</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+async function renderFullVerificationPage() {
+  if (!state.runId) {
+    if ($("full-page-scoreboard-container")) {
+      $("full-page-scoreboard-container").innerHTML = `<div class="card p-6 text-center muted">No run selected. Please run or select an event on the Map page.</div>`;
+    }
+    return;
+  }
+  const data = state.scoreboard || await api(`/runs/${state.runId}/scoreboard`).catch(() => null);
+  if (!data) return;
+
+  const m = data.metrics?.["60"] || data.metrics?.["30"] || {};
+  if ($("page-kpi-bss")) $("page-kpi-bss").textContent = m.bss != null ? fmt(m.bss) : "—";
+  if ($("page-kpi-pod")) $("page-kpi-pod").textContent = m.pod != null ? fmt(m.pod) : "—";
+  if ($("page-kpi-far")) $("page-kpi-far").textContent = m.far != null ? fmt(m.far) : "—";
+  if ($("page-kpi-csi")) $("page-kpi-csi").textContent = m.csi != null ? fmt(m.csi) : "—";
+
+  if ($("full-page-scoreboard-container")) {
+    $("full-page-scoreboard-container").innerHTML = generateScoreboardHtml(data);
+  }
+}
+
+async function renderRadarPage() {
+  try {
+    const items = await api("/data-health");
+    const tbody = $("page-radar-health-tbody");
+    if (!tbody) return;
+
+    const modalityMap = {
+      imd_radar_gif: "Doppler Weather Radar (VIL/dBZ)",
+      gfs_nomads: "NWP Atmospheric Thermodynamics (CAPE/CIN)",
+      imerg_earthdata: "Precipitation Satellite (GPM Constellation)",
+      mosdac_insat: "Geostationary Satellite (INSAT-3D/3DR TIR)",
+      iss_lis: "Spaceborne Optical Lightning Sensor (ISS-LIS)",
+      synthetic_satellite: "Multi-Spectral Satellite Simulation",
+      synthetic_radar: "Polarimetric Radar Reflectivity Simulation",
+      synthetic_lightning: "GLM Sensor Lightning Optical Simulation"
+    };
+
+    const cadenceMap = {
+      imd_radar_gif: "10–15 min (Volume Scan)",
+      gfs_nomads: "6 hours (0.25° Global Grid)",
+      imerg_earthdata: "30 min (Early Run)",
+      mosdac_insat: "15 min (Half-Disk Scan)",
+      iss_lis: "Real-Time Orbital Track",
+      synthetic_satellite: "5 min (Replay)",
+      synthetic_radar: "5 min (Replay)",
+      synthetic_lightning: "Continuous Flash Epoch"
+    };
+
+    const rungMap = {
+      imd_radar_gif: "Rung 1 (Primary)",
+      gfs_nomads: "Rung 3 (NWP Proxy)",
+      imerg_earthdata: "Rung 2 (Satellite)",
+      mosdac_insat: "Rung 2 (Satellite Primary)",
+      iss_lis: "Ground Truth Sensor",
+      synthetic_satellite: "Simulation Pipeline",
+      synthetic_radar: "Simulation Pipeline",
+      synthetic_lightning: "Simulation Pipeline"
+    };
+
+    tbody.innerHTML = items.map((h) => `
+      <tr>
+        <td><strong>${h.source}</strong></td>
+        <td>${modalityMap[h.source] || "Remote Sensing Telemetry"}</td>
+        <td>${cadenceMap[h.source] || "15 min"}</td>
+        <td><span class="status-${h.status}">● ${h.status}</span></td>
+        <td><span class="badge">${rungMap[h.source] || "Rung 1"}</span></td>
+      </tr>
+    `).join("");
+  } catch (_) {}
+}
+
+// Alert page filters & toolbar bindings
+if ($("alert-search-input")) {
+  $("alert-search-input").oninput = (e) => {
+    state.alertSearch = e.target.value;
+    renderFullAlertsPage();
+  };
+}
+
+document.querySelectorAll(".filter-chip").forEach((btn) => {
+  btn.onclick = () => {
+    document.querySelectorAll(".filter-chip").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    state.alertFilter = btn.dataset.filter;
+    renderFullAlertsPage();
+  };
+});
+
+if ($("page-btn-dispatch-cap")) {
+  $("page-btn-dispatch-cap").onclick = () => {
+    if ($("btn-dispatch-cap")) $("btn-dispatch-cap").click();
+  };
+}
+if ($("page-btn-bulletin")) {
+  $("page-btn-bulletin").onclick = () => {
+    if (state.forecasts && state.forecasts.length) {
+      openBulletinModal(currentForecast()?.id);
+    } else {
+      showToast("Please run or load an event replay first.");
+    }
+  };
+}
+if ($("page-btn-print-audit")) {
+  $("page-btn-print-audit").onclick = () => {
+    window.print();
+  };
+}
+if ($("btn-show-shortcuts")) {
+  $("btn-show-shortcuts").onclick = () => {
+    openShortcutsModal();
+  };
+}
+
 // ---------- data health ----------
 async function loadHealth() {
   try {
@@ -2635,20 +2925,17 @@ setInterval(loadHealth, 60000);
       state.eventId = ev.id;
       $("event-select").value = ev.id;
       setModeBadge(ev.mode);
-      $("run-status").textContent = "Auto-running the labelled case-study event for a first look…";
-      try {
-        const res = await api(`/replay/${ev.id}/run`, { method: "POST" });
-        state.runId = res.run_id;
-        $("run-status").textContent = `Run ${res.run_id}: ${res.cycles} cycles, ${res.alerts} alerts (${ev.mode}).`;
-        await loadRun();
-      } catch (e) {
-        $("run-status").textContent = `Auto-run failed: ${e.message}`;
-      }
+      await loadEventReplay(ev.id);
+    }
+    // Check initial hash
+    const initialHash = window.location.hash.replace("#/", "");
+    if (initialHash && ["map", "alerts", "verify", "radar", "about"].includes(initialHash)) {
+      switchPage(initialHash);
     }
     // Pre-warm the held-out SEVIR benchmark so the scoreboard moment is instant.
     prewarmBenchmark();
   } catch (e) {
-    $("run-status").textContent = `API unreachable: ${e.message}`;
+    if ($("run-status")) $("run-status").textContent = `API unreachable: ${e.message}`;
   }
 })();
 

@@ -171,7 +171,7 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
 
     @app.get("/api/v1/runs")
     def runs() -> list[dict]:
-        return [{"id": r.id, "event_id": r.event_id, "cycles": r.cycles,
+        return [{"id": r.id, "run_id": r.id, "event_id": r.event_id, "cycles": r.cycles,
                  "started_at": r.started_at.isoformat()} for r in store.list_runs()]
 
     @app.get("/api/v1/runs/{run_id}")
@@ -248,6 +248,7 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
             })
         return out
 
+
     @app.get("/api/v1/forecasts/{fid}")
     def forecast_detail(fid: str) -> dict:
         f = store.get_forecast(fid)
@@ -258,14 +259,14 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
     @app.get("/api/v1/forecasts/{fid}/field.png")
     def forecast_png(fid: str, lead: int = Query(60)) -> Response:
         paths = store.get_field_paths(fid, lead)
-        if not paths:
+        if not paths or not paths[1].exists():
             raise HTTPException(404, f"field for lead={lead} not found")
         return FileResponse(paths[1], media_type="image/png")
 
     @app.get("/api/v1/forecasts/{fid}/field.npz")
     def forecast_npz(fid: str, lead: int = Query(60)) -> FileResponse:
         paths = store.get_field_paths(fid, lead)
-        if not paths:
+        if not paths or not paths[0].exists():
             raise HTTPException(404, f"field for lead={lead} not found")
         return FileResponse(paths[0], media_type="application/octet-stream")
 

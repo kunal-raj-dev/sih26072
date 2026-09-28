@@ -3,220 +3,671 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Project Vajra — Thunderstorm & Lightning Nowcast</title>
+<title>Project Vajra — Thunderstorm &amp; Lightning Nowcast (MoES/IMD)</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>⚡</text></svg>" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/vendor/maplibre-gl.css" />
 <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
 <a href="#map" class="skip-link">Skip to interactive map</a>
+
+<!-- Top Application Header with Multi-Page Navigation -->
 <header id="topbar" role="banner">
   <div class="brand">
     <span class="logo">⚡</span>
     <div>
-      <h1>Project Vajra</h1>
-      <div class="subtitle">⚡ Predicts lightning 30–60 min ahead · SIH 2026 PS 26072 (MoES/IMD)</div>
+      <div class="brand-row">
+        <h1>Project Vajra</h1>
+        <span class="govt-pill">MoES / IMD</span>
+      </div>
+      <div class="subtitle">Real-Time Lightning Nowcast (30–60 min) · SIH 2026 PS 26072</div>
     </div>
   </div>
-  <div class="persona-switcher" role="group" aria-label="Operational Persona Mode">
-    <button id="persona-imd" class="persona-btn active" title="Switch to IMD Duty Forecaster Mode" aria-pressed="true">🔬 IMD Forecaster</button>
-    <button id="persona-ddma" class="persona-btn" title="Switch to DDMA Disaster Management Mode" aria-pressed="false">🛡️ DDMA Portal</button>
-  </div>
-  <div class="badges">
-    <span id="mode-badge" class="badge badge-mode" title="Data mode of the displayed forecast">—</span>
-    <span id="rung-badge" class="badge" title="Active model rung (fallback ladder)">—</span>
-    <span id="conf-badge" class="badge" title="Overall confidence (documented heuristic)">—</span>
+
+  <!-- Multi-Page Navigation Tabs -->
+  <nav id="main-nav" class="nav-tabs" role="tablist" aria-label="Main Application Pages">
+    <button class="nav-tab active" data-page="map" role="tab" aria-selected="true" id="tab-map">
+      <span class="nav-icon">🛰️</span>
+      <span class="nav-label">Nowcast Map</span>
+    </button>
+    <button class="nav-tab" data-page="alerts" role="tab" aria-selected="false" id="tab-alerts">
+      <span class="nav-icon">🚨</span>
+      <span class="nav-label">Alert Center &amp; DDMA</span>
+      <span id="nav-alert-badge" class="nav-counter" style="display:none;">0</span>
+    </button>
+    <button class="nav-tab" data-page="verify" role="tab" aria-selected="false" id="tab-verify">
+      <span class="nav-icon">📊</span>
+      <span class="nav-label">Verification &amp; Audit</span>
+    </button>
+    <button class="nav-tab" data-page="radar" role="tab" aria-selected="false" id="tab-radar">
+      <span class="nav-icon">📡</span>
+      <span class="nav-label">Doppler Radar Lab</span>
+    </button>
+    <button class="nav-tab" data-page="about" role="tab" aria-selected="false" id="tab-about">
+      <span class="nav-icon">📘</span>
+      <span class="nav-label">System &amp; Docs</span>
+    </button>
+  </nav>
+
+  <div class="topbar-right">
+    <div class="persona-switcher" role="group" aria-label="Operational Persona Mode">
+      <button id="persona-imd" class="persona-btn active" title="Switch to IMD Duty Forecaster Mode" aria-pressed="true">🔬 IMD Forecaster</button>
+      <button id="persona-ddma" class="persona-btn" title="Switch to DDMA Disaster Management Mode" aria-pressed="false">🛡️ DDMA Portal</button>
+    </div>
+    <div class="badges">
+      <span id="mode-badge" class="badge badge-mode" title="Data mode of the displayed forecast">—</span>
+      <span id="rung-badge" class="badge" title="Active model rung (fallback ladder)">—</span>
+      <span id="conf-badge" class="badge" title="Overall confidence (documented heuristic)">—</span>
+    </div>
   </div>
 </header>
 
-<main id="layout">
-  <aside id="left" aria-label="Forecast controls and layer presets">
-    <section class="panel">
-      <h2>Event</h2>
-      <select id="event-select" aria-label="Select replay event"></select>
-      <button id="run-btn" class="primary" aria-label="Run nowcast replay">Run nowcast replay</button>
-      <div id="run-status" class="muted small">Select an event and run the replay. Replay data is real historical data; simulated events are labelled SIMULATION.</div>
-    </section>
+<!-- Main Application Multi-Page Container -->
+<main id="app-pages">
 
-    <section class="panel">
-      <h2>Replay timeline &amp; controls</h2>
-      <div class="time-controls">
-        <button id="rewind-btn" title="Rewind to start (Home)" aria-label="Rewind to start (Home)">|◀</button>
-        <button id="prev-btn" title="Previous cycle (Left Arrow)" aria-label="Previous cycle (Left Arrow)">◀</button>
-        <button id="play-btn" title="Play/Pause (Space)" class="primary" aria-label="Play or Pause replay (Space)">▶</button>
-        <button id="next-btn" title="Next cycle (Right Arrow)" aria-label="Next cycle (Right Arrow)">▶</button>
-        <button id="loop-btn" class="active" title="Toggle Loop Playback" aria-label="Toggle loop playback">🔁</button>
-        <button id="t0-btn" title="Jump to first alert issue cycle (T0)" aria-label="Jump to first alert issue cycle (T0)">● T0</button>
-        <select id="speed-select" title="Playback speed" aria-label="Playback speed">
-          <option value="1">1x</option>
-          <option value="2">2x</option>
-          <option value="4">4x</option>
-          <option value="0.5">0.5x</option>
-        </select>
-        <span id="horizon-indicator" class="horizon-indicator sr-only" aria-live="polite"></span>
-        <div class="clock-container">
-          <span id="clock" class="clock-utc">— Z</span>
-          <span id="clock-ist" class="clock-ist">— IST</span>
+  <!-- ========================================== -->
+  <!-- PAGE 1: NOWCAST MAP (MISSION CONTROL)      -->
+  <!-- ========================================== -->
+  <section id="page-map" class="app-page active" role="tabpanel" aria-labelledby="tab-map">
+    <div id="layout">
+      <!-- Left Control Panel -->
+      <aside id="left" aria-label="Forecast controls and layer presets">
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Select Event</h2>
+          </div>
+          <select id="event-select" aria-label="Select replay event"></select>
+          <button id="run-btn" class="primary" aria-label="Run nowcast replay">⚡ Run nowcast replay</button>
+          <div id="run-status" class="muted small">Select an event and run replay. Replay data is real historical data; simulated events are labelled SIMULATION.</div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Replay Timeline &amp; Controls</h2>
+          </div>
+          <div class="time-controls">
+            <button id="rewind-btn" title="Rewind to start (Home)" aria-label="Rewind to start (Home)">|◀</button>
+            <button id="prev-btn" title="Previous cycle (Left Arrow)" aria-label="Previous cycle (Left Arrow)">◀</button>
+            <button id="play-btn" title="Play/Pause (Space)" class="primary" aria-label="Play or Pause replay (Space)">▶</button>
+            <button id="next-btn" title="Next cycle (Right Arrow)" aria-label="Next cycle (Right Arrow)">▶</button>
+            <button id="loop-btn" class="active" title="Toggle Loop Playback" aria-label="Toggle loop playback">🔁</button>
+            <button id="t0-btn" title="Jump to first alert issue cycle (T0)" aria-label="Jump to first alert issue cycle (T0)">● T0</button>
+            <select id="speed-select" title="Playback speed" aria-label="Playback speed">
+              <option value="1">1x</option>
+              <option value="2">2x</option>
+              <option value="4">4x</option>
+              <option value="0.5">0.5x</option>
+            </select>
+            <span id="horizon-indicator" class="horizon-indicator sr-only" aria-live="polite"></span>
+            <div class="clock-container">
+              <span id="clock" class="clock-utc">— Z</span>
+              <span id="clock-ist" class="clock-ist">— IST</span>
+            </div>
+          </div>
+          <div id="timeline-axis" tabindex="0" role="slider"
+               aria-label="Event timeline — observed (solid) and forecast (dashed) with alert markers; arrow keys step, click or drag to jump"
+               aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+            <div class="tl-rail"></div>
+            <div class="tl-seg-observed"></div>
+            <div class="tl-seg-forecast"></div>
+            <div class="tl-ticks"></div>
+            <div class="tl-markers" id="tl-markers"></div>
+            <div class="tl-now"><span class="tl-now-dot"></span><span class="tl-now-label">NOW</span></div>
+          </div>
+          <div class="lead-row">
+            <span class="tl-lead-label">Lead Horizon:</span>
+            <button id="lead-30" class="tl-lead-btn" aria-pressed="false">+30m</button>
+            <button id="lead-60" class="tl-lead-btn" aria-pressed="true">+60m</button>
+            <span id="tl-info" class="muted small" style="margin-left:auto;"></span>
+            <label class="chk" style="margin:0 0 0 8px;"><input type="checkbox" id="show-actual" checked /> actual flashes</label>
+          </div>
+          <div id="cycle-note" class="muted small"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Map View Modes</h2>
+          </div>
+          <div class="preset-switch" role="group" aria-label="Map view preset">
+            <button class="map-preset" id="preset-observe" data-preset="OBSERVE" aria-pressed="false">👁 OBSERVE</button>
+            <button class="map-preset" id="preset-nowcast" data-preset="NOWCAST" aria-pressed="true">⚡ NOWCAST</button>
+            <button class="map-preset" id="preset-compare" data-preset="COMPARE" aria-pressed="false">⇔ COMPARE</button>
+          </div>
+          <button id="fit-storm" class="small-btn outline-btn" style="width:100%;margin-top:8px;" aria-label="Fit map camera to storm event (R)">⌖ Fit Storm Footprint (R)</button>
+          <div id="compare-caption" class="compare-caption" style="display:none;">
+            <div class="compare-labels"><span>◂ OBSERVED</span><span id="compare-val">50/50</span><span>NOWCAST ▸</span></div>
+            <input type="range" id="compare-slider" min="0" max="100" value="50" aria-label="Observed vs nowcast wipe" />
+            <div class="muted small" style="margin-top:4px;">Crossfade between observed flash/radar field and calibrated probabilistic nowcast.</div>
+          </div>
+          <details class="expert-drawer">
+            <summary>Layers &amp; Visual Opacity</summary>
+            <div class="drawer-content">
+              <label class="chk"><input type="checkbox" id="lyr-prob" checked /> Forecast flash probability</label>
+              <div class="slider-row">
+                <label for="lyr-prob-opacity">Probability opacity: <span id="prob-opacity-val">92%</span></label>
+                <input type="range" id="lyr-prob-opacity" min="15" max="100" value="92" aria-label="Forecast probability layer opacity" />
+              </div>
+              <label class="chk"><input type="checkbox" id="lyr-obs" checked /> Observation field (VIL / IR)</label>
+              <label class="chk"><input type="checkbox" id="lyr-cells" checked /> Storm cells (centroid / core)</label>
+              <label class="chk"><input type="checkbox" id="lyr-cones" checked /> Projected tracks &amp; cones (60 min)</label>
+              <label class="chk"><input type="checkbox" id="lyr-flashes" checked /> Lightning flashes (GLM/LIS)</label>
+              <label class="chk"><input type="checkbox" id="lyr-admin" checked /> Administrative boundaries</label>
+              <label class="chk persona-imd-only"><input type="checkbox" id="lyr-radar-rings" checked /> Radar range rings (100 / 250 km)</label>
+              <label class="chk persona-imd-only"><input type="checkbox" id="lyr-radar-mosaic" /> Multi-Radar Composite (dBZ)</label>
+              <label class="chk persona-imd-only"><input type="checkbox" id="lyr-ci" checked /> Convective Initiation (precursor)</label>
+              <label class="chk persona-imd-only"><input type="checkbox" id="lyr-uncertainty" /> Forecast Uncertainty field</label>
+              <label class="chk persona-imd-only"><input type="checkbox" id="lyr-live" /> IMD radar (LIVE, visual only)</label>
+              <div class="station-row persona-imd-only">
+                <select id="station-select" aria-label="IMD radar station">
+                  <option value="delhi">Delhi DWR</option><option value="patna">Patna DWR</option>
+                  <option value="kolkata">Kolkata DWR</option><option value="lucknow">Lucknow DWR</option>
+                </select>
+              </div>
+            </div>
+          </details>
+          <div class="district-jump-row">
+            <label for="district-select">🎯 Jump to District:</label>
+            <select id="district-select" aria-label="Quick jump to district">
+              <option value="">Select District…</option>
+              <option value="Patna">Patna</option>
+              <option value="Gaya">Gaya</option>
+              <option value="Muzaffarpur">Muzaffarpur</option>
+              <option value="Vaishali">Vaishali</option>
+              <option value="Nalanda">Nalanda</option>
+              <option value="Begusarai">Begusarai</option>
+              <option value="Bhagalpur">Bhagalpur</option>
+              <option value="Darbhanga">Darbhanga</option>
+              <option value="Rohtas">Rohtas</option>
+              <option value="Ranchi">Ranchi</option>
+              <option value="East Singhbhum">East Singhbhum (Jamshedpur)</option>
+              <option value="Dhanbad">Dhanbad</option>
+            </select>
+          </div>
+        </section>
+      </aside>
+
+      <!-- Central Map Viewport -->
+      <div id="map-wrap" class="map-wrap" role="region" aria-label="Interactive Thunderstorm Nowcast Map">
+        <div id="map"></div>
+
+        <!-- Presentation Demo Rail -->
+        <nav id="demo-rail" class="demo-rail" aria-label="Presentation Rehearsal Sequencer">
+          <div class="rail-header">
+            <div class="rail-title-group">
+              <span class="rail-title">🎙️ DEMO RAIL</span>
+              <span class="rail-badge">8 MOMENTS</span>
+            </div>
+            <div class="rail-actions">
+              <button id="rail-btn-prev" class="rail-nav-btn" title="Previous moment ([)" aria-label="Previous demo moment ([)">◂ Prev</button>
+              <button id="rail-btn-next" class="rail-nav-btn" title="Next moment (])" aria-label="Next demo moment (])">Next ▸</button>
+              <button id="rail-btn-reset" class="rail-action-btn" title="Reset to Zero State (R)" aria-label="Reset to Zero State (R)">↺ Reset (R)</button>
+              <button id="rail-btn-help" class="rail-action-btn" title="Keyboard Shortcuts (?)" aria-label="Keyboard Shortcuts (?)">⌨ ?</button>
+              <button id="rail-btn-hide" class="rail-action-btn" title="Dismiss Rail to Operational Mode (Esc)" aria-label="Dismiss Rail to Operational Mode (Esc)">✕ Hide</button>
+            </div>
+          </div>
+          <div class="rail-chips" role="group" aria-label="Demo Sequence Steps">
+            <button class="rail-chip active" data-step="1" aria-current="step" title="1. Zero-State Strike (Canonical Bihar peak cycle)">① ORIENT</button>
+            <button class="rail-chip" data-step="2" title="2. Multi-Sensor Detection (Cells + tracks + dBZ)">② OBSERVE</button>
+            <button class="rail-chip" data-step="3" title="3. Calibrated Nowcast (Field overlay + widening cones)">③ PREDICT</button>
+            <button class="rail-chip" data-step="4" title="4. Convective Initiation (Precursor cyan rings)">④ CI</button>
+            <button class="rail-chip" data-step="5" title="5. Impact &amp; Warn (DDMA blocks + population)">⑤ WARN</button>
+            <button class="rail-chip" data-step="6" title="6. Graceful Degradation (Satellite fallback ladder)">⑥ DEGRADE</button>
+            <button class="rail-chip" data-step="7" title="7. Ground-Truth Verification (Settled verdicts + COMPARE)">⑦ VERIFY</button>
+            <button class="rail-chip" data-step="8" title="8. Scientific Audit Scoreboard (BSS + ROC-AUC)">⑧ AUDIT</button>
+          </div>
+          <div id="rail-caption" class="rail-caption" aria-live="polite">
+            ① ORIENT — Zero-State Strike: Canonical Bihar squall peak cycle, storm-zoomed, threat hero card.
+          </div>
+        </nav>
+        <button id="rail-pill" class="rail-pill" style="display:none;" title="Restore Presentation Demo Rail (1–8)" aria-label="Restore Presentation Demo Rail (1–8)">🎙️ Demo Rail (1–8)</button>
+      </div>
+
+      <!-- Right Panel: Alerts & Health -->
+      <aside id="right" aria-label="Active alerts, data health, and legend">
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Threat Overview</h2>
+          </div>
+          <div id="threat-hero" class="threat-hero" data-stage="GREEN" aria-live="polite"></div>
+          <div class="preset-row">
+            <span class="label">Preset:</span>
+            <select id="preset-select" aria-label="Alert preset">
+              <option value="operational">Operational (balanced)</option>
+              <option value="protective">Protective (high POD)</option>
+            </select>
+            <button id="btn-cycle-bulletin" class="small-btn danger" title="Generate official printable IMD/NDMA Emergency Bulletin" aria-label="Generate official printable IMD/NDMA Emergency Bulletin">📄 Bulletin</button>
+            <a href="/api/v1/alerts/feed.atom" target="_blank" rel="noopener" class="feed-badge-link" aria-label="CAP 1.2 Atom Alert Feed">📡 Feed</a>
+          </div>
+
+          <!-- DDMA Actions -->
+          <div id="ddma-actions" class="ddma-actions persona-ddma-only" style="display:none;margin-top:10px;">
+            <button id="btn-dispatch-cap" class="small-btn danger pulse-btn" style="width:100%;font-weight:700;margin-bottom:6px;">🚨 1-Click Broadcast CAP 1.2 to SACHET</button>
+            <label class="chk" style="font-size:12px;margin:2px 0;"><input type="checkbox" id="chk-audio-chime" checked /> 🔔 Audio Alert Chime (Web Audio Synthesizer)</label>
+          </div>
+          <div id="ddma-summary-card" class="ddma-summary-card persona-ddma-only" style="display:none;margin-top:8px;">
+            <div style="font-weight:700;font-size:12px;margin-bottom:4px;color:var(--text-strong);">🛡️ DDMA Incident Response Overview</div>
+            <div id="ddma-impact-stats" style="font-size:12px;color:var(--text);">Analyzing active storm footprints…</div>
+          </div>
+
+          <div class="alerts-list-header">
+            <span class="small font-semibold">Active Warnings</span>
+            <button class="text-link-btn" onclick="switchPage('alerts')">View all &rarr;</button>
+          </div>
+          <div id="alerts-list" class="alerts"><div class="muted">no alerts</div></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Data Stream Health</h2>
+            <button class="text-link-btn" onclick="switchPage('radar')">Details &rarr;</button>
+          </div>
+          <div id="data-health" class="health"><span class="muted">—</span></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Legend</h2>
+          </div>
+          <div class="legend" id="legend-items"></div>
+          <div class="muted small" style="margin-top:6px;">Bands are configurable defaults — not validated IMD operational thresholds.</div>
+        </section>
+      </aside>
+    </div>
+
+    <!-- Verification Bar Strip -->
+    <section id="verify-strip" aria-label="Forecast verification — this run versus observed flashes">
+      <span class="vs-label">VERIFY</span>
+      <span class="vs-scope muted small" id="vs-scope">run a replay to settle forecasts</span>
+      <div class="vs-numbers" id="vs-numbers" aria-live="polite"></div>
+      <svg id="vs-reliability" width="132" height="40" style="display:none;" role="img"></svg>
+      <button id="vs-audit" class="small-btn primary" style="margin-left:auto;">📊 Full Scoreboard &amp; Audit</button>
+    </section>
+  </section>
+
+  <!-- ========================================== -->
+  <!-- PAGE 2: ALERTS & DDMA DISASTER PORTAL      -->
+  <!-- ========================================== -->
+  <section id="page-alerts" class="app-page page-container" style="display:none;" role="tabpanel" aria-labelledby="tab-alerts">
+    <div class="page-header">
+      <div>
+        <h2 class="page-title">🚨 Alert Center &amp; Civil Protection (DDMA Portal)</h2>
+        <p class="page-subtitle">Real-time localized severe thunderstorm and lightning warning swaths with automated CAP 1.2 dissemination.</p>
+      </div>
+      <div class="page-header-actions">
+        <button id="page-btn-dispatch-cap" class="action-btn danger-btn">🚨 Broadcast CAP 1.2 to SACHET</button>
+        <button id="page-btn-bulletin" class="action-btn secondary-btn">📄 Printable Emergency Bulletin</button>
+        <a href="/api/v1/alerts/feed.atom" target="_blank" rel="noopener" class="action-btn outline-btn">📡 Live Atom Feed</a>
+      </div>
+    </div>
+
+    <!-- Alert KPIs Grid -->
+    <div class="stats-grid">
+      <div class="stat-card stat-red">
+        <div class="stat-label">IMD RED WARNINGS</div>
+        <div class="stat-val" id="alert-kpi-red">0</div>
+        <div class="stat-desc">Severe strike threat (&ge; 80% prob) — Take Immediate Shelter</div>
+      </div>
+      <div class="stat-card stat-orange">
+        <div class="stat-label">IMD ORANGE WARNINGS</div>
+        <div class="stat-val" id="alert-kpi-orange">0</div>
+        <div class="stat-desc">High strike threat (&ge; 60% prob) — Be Prepared</div>
+      </div>
+      <div class="stat-card stat-yellow">
+        <div class="stat-label">IMD YELLOW WATCHES</div>
+        <div class="stat-val" id="alert-kpi-yellow">0</div>
+        <div class="stat-desc">Elevated strike threat (&ge; 40% prob) — Be Updated</div>
+      </div>
+      <div class="stat-card stat-blue">
+        <div class="stat-label">EXPOSED POPULATION</div>
+        <div class="stat-val" id="alert-kpi-pop">0</div>
+        <div class="stat-desc">Estimated individuals residing in active hazard swaths</div>
+      </div>
+    </div>
+
+    <!-- Filter & Search Toolbar -->
+    <div class="table-toolbar card">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="alert-search-input" placeholder="Filter by district, block name, or cell ID…" aria-label="Search alerts" />
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Filter Stage:</span>
+        <button class="filter-chip active" data-filter="all">All</button>
+        <button class="filter-chip chip-red" data-filter="RED">RED</button>
+        <button class="filter-chip chip-orange" data-filter="ORANGE">ORANGE</button>
+        <button class="filter-chip chip-yellow" data-filter="YELLOW">YELLOW</button>
+      </div>
+      <div class="toolbar-right">
+        <label class="chk" style="margin:0;font-size:13px;">
+          <input type="checkbox" id="page-chk-audio" checked /> 🔔 Audible Alarm Chime
+        </label>
+      </div>
+    </div>
+
+    <!-- Full Alert Table Card -->
+    <div class="card table-card">
+      <div class="card-header">
+        <h3 class="card-title">Active Block-Level Weather Warnings In Force</h3>
+        <span class="card-tag" id="alerts-table-count">0 warnings active</span>
+      </div>
+      <div class="table-responsive">
+        <table class="data-table" id="full-alerts-table">
+          <thead>
+            <tr>
+              <th>IMD Stage</th>
+              <th>District &amp; Blocks</th>
+              <th>Lightning Probability</th>
+              <th>Valid Horizon</th>
+              <th>Exposed Pop.</th>
+              <th>Storm Cell ID</th>
+              <th>Public Instruction</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="full-alerts-tbody">
+            <tr>
+              <td colspan="8" class="text-center py-8 muted">No active alerts loaded. Please select an event and run replay.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================== -->
+  <!-- PAGE 3: SCIENTIFIC VERIFICATION & AUDIT   -->
+  <!-- ========================================== -->
+  <section id="page-verify" class="app-page page-container" style="display:none;" role="tabpanel" aria-labelledby="tab-verify">
+    <div class="page-header">
+      <div>
+        <h2 class="page-title">📊 Operational Verification &amp; Scientific Audit</h2>
+        <p class="page-subtitle">Rigorous statistical evaluation against spaceborne physical GLM &amp; ISS-LIS lightning flash sensors.</p>
+      </div>
+      <div class="page-header-actions">
+        <button id="page-btn-print-audit" class="action-btn primary-btn">🖨️ Print Scientific Audit</button>
+        <button onclick="switchPage('map')" class="action-btn outline-btn">🛰️ Return to Map</button>
+      </div>
+    </div>
+
+    <!-- Verification Hero KPIs -->
+    <div class="stats-grid">
+      <div class="stat-card stat-blue">
+        <div class="stat-label">BRIER SKILL SCORE (BSS)</div>
+        <div class="stat-val" id="page-kpi-bss">—</div>
+        <div class="stat-desc">Skill relative to climatology (+60m lead). &gt;0 indicates skill.</div>
+      </div>
+      <div class="stat-card stat-green">
+        <div class="stat-label">PROBABILITY OF DETECTION</div>
+        <div class="stat-val" id="page-kpi-pod">—</div>
+        <div class="stat-desc">Hit rate: fraction of observed lightning correctly flagged.</div>
+      </div>
+      <div class="stat-card stat-red">
+        <div class="stat-label">FALSE ALARM RATIO (FAR)</div>
+        <div class="stat-val" id="page-kpi-far">—</div>
+        <div class="stat-desc">Fraction of issued warnings with no lightning detected.</div>
+      </div>
+      <div class="stat-card stat-yellow">
+        <div class="stat-label">CRITICAL SUCCESS INDEX</div>
+        <div class="stat-val" id="page-kpi-csi">—</div>
+        <div class="stat-desc">Threat Score: Hits / (Hits + Misses + False Alarms).</div>
+      </div>
+    </div>
+
+    <!-- Dynamic Scoreboard Inject Area -->
+    <div id="full-page-scoreboard-container">
+      <div class="card p-6 text-center muted">Loading scientific scoreboard metrics…</div>
+    </div>
+  </section>
+
+  <!-- ========================================== -->
+  <!-- PAGE 4: DOPPLER RADAR & SENSOR LAB         -->
+  <!-- ========================================== -->
+  <section id="page-radar" class="app-page page-container" style="display:none;" role="tabpanel" aria-labelledby="tab-radar">
+    <div class="page-header">
+      <div>
+        <h2 class="page-title">📡 Doppler Weather Radar &amp; Sensor Composite Lab</h2>
+        <p class="page-subtitle">Multi-radar composite mosaics, Convective Initiation (CI) satellite precursors, and telemetry health.</p>
+      </div>
+      <div class="page-header-actions">
+        <button onclick="switchPage('map')" class="action-btn primary-btn">🛰️ View on Map</button>
+      </div>
+    </div>
+
+    <!-- Multi-Radar Network Cards -->
+    <div class="radar-grid">
+      <!-- Radar Overview Card -->
+      <div class="card p-5">
+        <h3 class="card-title mb-3">📡 Indian Doppler Weather Radar (DWR) Network</h3>
+        <p class="small text-slate-600 mb-4">
+          IMD operates S-band and C-band Doppler radars providing 250 km surveillance radius with 10–15 minute volume scan cadences.
+          Vajra fuses multi-radar polarimetric composites with geostationary satellite infrared cooling rates.
+        </p>
+
+        <div class="station-cards-grid">
+          <div class="station-card">
+            <div class="station-name">📍 Patna DWR</div>
+            <div class="station-detail">Type: <strong>S-Band Polarimetric</strong></div>
+            <div class="station-detail">Range: <strong>250 km</strong> · Lat: 25.6°N, Lon: 85.1°E</div>
+            <div class="station-status status-online">● ACTIVE CASE-STUDY</div>
+          </div>
+          <div class="station-card">
+            <div class="station-name">📍 Delhi (Mausam Bhawan)</div>
+            <div class="station-detail">Type: <strong>C-Band Doppler</strong></div>
+            <div class="station-detail">Range: <strong>250 km</strong> · Lat: 28.6°N, Lon: 77.2°E</div>
+            <div class="station-status status-online">● OPERATIONAL</div>
+          </div>
+          <div class="station-card">
+            <div class="station-name">📍 Kolkata (Alipore)</div>
+            <div class="station-detail">Type: <strong>S-Band Doppler</strong></div>
+            <div class="station-detail">Range: <strong>250 km</strong> · Lat: 22.5°N, Lon: 88.3°E</div>
+            <div class="station-status status-online">● OPERATIONAL</div>
+          </div>
+          <div class="station-card">
+            <div class="station-name">📍 Lucknow (Amausi)</div>
+            <div class="station-detail">Type: <strong>C-Band Doppler</strong></div>
+            <div class="station-detail">Range: <strong>250 km</strong> · Lat: 26.8°N, Lon: 80.9°E</div>
+            <div class="station-status status-online">● OPERATIONAL</div>
+          </div>
         </div>
       </div>
-      <div id="timeline-axis" tabindex="0" role="slider"
-           aria-label="Event timeline — observed (solid) and forecast (dashed) with alert markers; arrow keys step, click or drag to jump"
-           aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
-        <div class="tl-rail"></div>
-        <div class="tl-seg-observed"></div>
-        <div class="tl-seg-forecast"></div>
-        <div class="tl-ticks"></div>
-        <div class="tl-markers" id="tl-markers"></div>
-        <div class="tl-now"><span class="tl-now-dot"></span><span class="tl-now-label">NOW</span></div>
-      </div>
-      <div class="lead-row">
-        <span class="tl-lead-label">Horizon:</span>
-        <button id="lead-30" class="tl-lead-btn" aria-pressed="false">+30m</button>
-        <button id="lead-60" class="tl-lead-btn" aria-pressed="true">+60m</button>
-        <span id="tl-info" class="muted small" style="margin-left:auto;"></span>
-        <label class="chk" style="margin:0 0 0 8px;"><input type="checkbox" id="show-actual" checked /> actual flashes</label>
-      </div>
-      <div id="cycle-note" class="muted small"></div>
-    </section>
 
-    <section class="panel">
-      <h2>Map view</h2>
-      <div class="preset-switch" role="group" aria-label="Map view preset">
-        <button class="map-preset" id="preset-observe" data-preset="OBSERVE" aria-pressed="false">👁 OBSERVE</button>
-        <button class="map-preset" id="preset-nowcast" data-preset="NOWCAST" aria-pressed="true">⚡ NOWCAST</button>
-        <button class="map-preset" id="preset-compare" data-preset="COMPARE" aria-pressed="false">⇔ COMPARE</button>
-      </div>
-      <button id="fit-storm" class="small-btn" style="width:100%;margin-top:6px;" aria-label="Fit map camera to storm event (R)">⌖ Fit storm (R)</button>
-      <div id="compare-caption" class="compare-caption" style="display:none;">
-        <div class="compare-labels"><span>◂ OBSERVED</span><span id="compare-val">50/50</span><span>NOWCAST ▸</span></div>
-        <input type="range" id="compare-slider" min="0" max="100" value="50" aria-label="Observed vs nowcast wipe" />
-        <div class="muted small" style="margin-top:4px;">Crossfade between the observed field and the nowcast — the verification view.</div>
-      </div>
-      <details class="expert-drawer">
-        <summary>Expert layers &amp; opacity</summary>
-        <label class="chk"><input type="checkbox" id="lyr-prob" checked /> Forecast flash probability</label>
-        <div class="slider-row">
-          <label for="lyr-prob-opacity">Probability opacity: <span id="prob-opacity-val">92%</span></label>
-          <input type="range" id="lyr-prob-opacity" min="15" max="100" value="92" aria-label="Forecast probability layer opacity" />
+      <!-- Convective Initiation Precursor Card -->
+      <div class="card p-5">
+        <h3 class="card-title mb-3">⚡ Convective Initiation (CI) Precursor Detection</h3>
+        <p class="small text-slate-600 mb-3">
+          Detecting thunderstorms <strong>before</strong> the first radar echo appears (&gt;35 dBZ) using INSAT-3D/3DR 10.8 &mu;m thermal infrared cooling rates.
+        </p>
+        <div class="ci-metric-box">
+          <div class="ci-metric-row">
+            <span>Critical Cloud-Top Cooling Rate:</span>
+            <strong>dT/dt &lt; -4.0 K / 15 min</strong>
+          </div>
+          <div class="ci-metric-row">
+            <span>Water Vapor Depletion Channel:</span>
+            <strong>(6.7 &mu;m - 10.8 &mu;m) &gt; -1.0 K</strong>
+          </div>
+          <div class="ci-metric-row">
+            <span>Pre-Radar Warning Lead Advantage:</span>
+            <strong style="color:var(--accent);">20 to 45 minutes advance notice</strong>
+          </div>
         </div>
-        <label class="chk"><input type="checkbox" id="lyr-obs" checked /> Observation field (VIL / IR)</label>
-        <label class="chk"><input type="checkbox" id="lyr-cells" checked /> Storm cells (centroid / core)</label>
-        <label class="chk"><input type="checkbox" id="lyr-cones" checked /> Projected tracks &amp; cones (60 min)</label>
-        <label class="chk"><input type="checkbox" id="lyr-flashes" checked /> Lightning flashes</label>
-        <label class="chk"><input type="checkbox" id="lyr-admin" checked /> Administrative boundaries</label>
-        <label class="chk persona-imd-only"><input type="checkbox" id="lyr-radar-rings" checked /> Radar range rings (100 / 250 km)</label>
-        <label class="chk persona-imd-only"><input type="checkbox" id="lyr-radar-mosaic" /> Multi-Radar Composite (dBZ)</label>
-        <label class="chk persona-imd-only"><input type="checkbox" id="lyr-ci" checked /> Convective Initiation (precursor)</label>
-        <label class="chk persona-imd-only"><input type="checkbox" id="lyr-uncertainty" /> Forecast Uncertainty field</label>
-        <label class="chk persona-imd-only"><input type="checkbox" id="lyr-live" /> IMD radar (LIVE, visual only)</label>
-        <div class="station-row persona-imd-only">
-          <select id="station-select" aria-label="IMD radar station">
-            <option value="delhi">Delhi</option><option value="patna">Patna</option>
-            <option value="kolkata">Kolkata</option><option value="lucknow">Lucknow</option>
-          </select>
-        </div>
-      </details>
-      <div class="district-jump-row">
-        <label for="district-select">🎯 Jump to District:</label>
-        <select id="district-select" aria-label="Quick jump to district">
-          <option value="">Select District…</option>
-          <option value="Patna">Patna</option>
-          <option value="Gaya">Gaya</option>
-          <option value="Muzaffarpur">Muzaffarpur</option>
-          <option value="Vaishali">Vaishali</option>
-          <option value="Nalanda">Nalanda</option>
-          <option value="Begusarai">Begusarai</option>
-          <option value="Bhagalpur">Bhagalpur</option>
-          <option value="Darbhanga">Darbhanga</option>
-          <option value="Rohtas">Rohtas</option>
-          <option value="Ranchi">Ranchi</option>
-          <option value="East Singhbhum">East Singhbhum (Jamshedpur)</option>
-          <option value="Dhanbad">Dhanbad</option>
-        </select>
-      </div>
-    </section>
-  </aside>
-
-  <div id="map-wrap" class="map-wrap" role="region" aria-label="Interactive Thunderstorm Nowcast Map">
-    <div id="map"></div>
-
-    <!-- Presentation Demo Rail (Phase P7) -->
-    <nav id="demo-rail" class="demo-rail" aria-label="Presentation Rehearsal Sequencer">
-      <div class="rail-header">
-        <span class="rail-title">🎙️ DEMO RAIL</span>
-        <span class="rail-badge">8 MOMENTS</span>
-        <div class="rail-actions">
-          <button id="rail-btn-prev" class="rail-nav-btn" title="Previous moment ([)" aria-label="Previous demo moment ([)">◂ Prev</button>
-          <button id="rail-btn-next" class="rail-nav-btn" title="Next moment (])" aria-label="Next demo moment (])">Next ▸</button>
-          <button id="rail-btn-reset" class="rail-action-btn" title="Reset to Zero State (R)" aria-label="Reset to Zero State (R)">↺ Reset (R)</button>
-          <button id="rail-btn-help" class="rail-action-btn" title="Keyboard Shortcuts (?)" aria-label="Keyboard Shortcuts (?)">⌨ ?</button>
-          <button id="rail-btn-hide" class="rail-action-btn" title="Dismiss Rail to Operational Mode (Esc)" aria-label="Dismiss Rail to Operational Mode (Esc)">✕ Hide</button>
+        <div class="ci-alert-preview">
+          <span class="badge" style="background:#e0f2fe;color:#0369a1;font-weight:700;">CI PRECURSOR IDENTIFIED</span>
+          <div class="small mt-1 text-slate-600">Rapidly glaciating cloud top detected over South Bihar plain prior to radar reflectivity emergence.</div>
         </div>
       </div>
-      <div class="rail-chips" role="group" aria-label="Demo Sequence Steps">
-        <button class="rail-chip active" data-step="1" aria-current="step" title="1. Zero-State Strike (Canonical Bihar peak cycle)">① ORIENT</button>
-        <button class="rail-chip" data-step="2" title="2. Multi-Sensor Detection (Cells + tracks + dBZ)">② OBSERVE</button>
-        <button class="rail-chip" data-step="3" title="3. Calibrated Nowcast (Field overlay + widening cones)">③ PREDICT</button>
-        <button class="rail-chip" data-step="4" title="4. Convective Initiation (Precursor cyan rings)">④ CI</button>
-        <button class="rail-chip" data-step="5" title="5. Impact &amp; Warn (DDMA blocks + population)">⑤ WARN</button>
-        <button class="rail-chip" data-step="6" title="6. Graceful Degradation (Satellite fallback ladder)">⑥ DEGRADE</button>
-        <button class="rail-chip" data-step="7" title="7. Ground-Truth Verification (Settled verdicts + COMPARE)">⑦ VERIFY</button>
-        <button class="rail-chip" data-step="8" title="8. Scientific Audit Scoreboard (BSS + ROC-AUC)">⑧ AUDIT</button>
-      </div>
-      <div id="rail-caption" class="rail-caption" aria-live="polite">
-        ① ORIENT — Zero-State Strike: Canonical Bihar squall peak cycle, storm-zoomed, threat hero card.
-      </div>
-    </nav>
-    <button id="rail-pill" class="rail-pill" style="display:none;" title="Restore Presentation Demo Rail (1–8)" aria-label="Restore Presentation Demo Rail (1–8)">🎙️ Demo Rail (1–8)</button>
-  </div>
+    </div>
 
-  <aside id="right" aria-label="Active alerts, data health, and legend">
-    <section class="panel">
-      <h2>Alert center</h2>
-      <div id="threat-hero" class="threat-hero" data-stage="GREEN" aria-live="polite"></div>
-      <div class="preset-row">
-        Preset:
-        <select id="preset-select" aria-label="Alert preset">
-          <option value="operational">Operational (balanced)</option>
-          <option value="protective">Protective (high POD)</option>
-        </select>
-        <button id="btn-cycle-bulletin" class="small-btn danger" title="Generate official printable IMD/NDMA Emergency Bulletin" aria-label="Generate official printable IMD/NDMA Emergency Bulletin">📄 Bulletin</button>
-        <a href="/api/v1/alerts/feed.atom" target="_blank" rel="noopener" aria-label="CAP 1.2 Atom Alert Feed (opens in new tab)" style="margin-left:2px;font-size:11px;color:#38bdf8;text-decoration:none;padding:2px 6px;border:1px solid #0284c7;border-radius:4px;">📡 Feed</a>
+    <!-- Data Streams Telemetry Card -->
+    <div class="card mt-6">
+      <div class="card-header">
+        <h3 class="card-title">Real-Time Ingestion Telemetry &amp; Pipeline Status</h3>
+        <span class="card-tag">Automated Health Monitor</span>
+      </div>
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Data Source</th>
+              <th>Sensor Modality</th>
+              <th>Ingestion Cadence</th>
+              <th>Operational Status</th>
+              <th>Fallback Layer</th>
+            </tr>
+          </thead>
+          <tbody id="page-radar-health-tbody">
+            <tr><td colspan="5" class="muted text-center py-4">Checking sensor stream health…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================== -->
+  <!-- PAGE 5: SYSTEM ARCHITECTURE & DOCS         -->
+  <!-- ========================================== -->
+  <section id="page-about" class="app-page page-container" style="display:none;" role="tabpanel" aria-labelledby="tab-about">
+    <div class="page-header">
+      <div>
+        <h2 class="page-title">📘 System Architecture &amp; Methodology</h2>
+        <p class="page-subtitle">Smart India Hackathon 2026 · Problem Statement 26072 (Ministry of Earth Sciences / IMD)</p>
+      </div>
+      <div class="page-header-actions">
+        <button id="btn-show-shortcuts" class="action-btn outline-btn">⌨ Keyboard Shortcuts</button>
+        <button onclick="switchPage('map')" class="action-btn primary-btn">Launch Mission Control</button>
+      </div>
+    </div>
+
+    <!-- Overview Grid -->
+    <div class="docs-grid">
+      <!-- Challenge Overview -->
+      <div class="card p-6">
+        <h3 class="card-title text-blue mb-3">⚡ Problem Statement Context (MoES/IMD PS 26072)</h3>
+        <p class="text-slate-700 leading-relaxed mb-3">
+          Lightning strikes account for over <strong>2,500 annual fatalities in India</strong>, causing greater loss of life than floods, cyclones, and heatwaves combined. The vast majority of victims are rural farmers, agricultural workers, and outdoor laborers in Bihar, Uttar Pradesh, Odisha, Jharkhand, and West Bengal.
+        </p>
+        <p class="text-slate-700 leading-relaxed mb-4">
+          Current operational synoptic warnings are broad, issued at the district level with multi-hour lead times, leading to alert fatigue and low compliance. <strong>Project Vajra</strong> delivers hyper-local, block-level (12 km resolution) probabilistic nowcasts with <strong>30–60 minutes lead time</strong>, calibrated to minimize false alarms while guaranteeing actionable response windows.
+        </p>
+
+        <h4 class="font-bold text-slate-800 mb-2">Key Engineering Guarantees:</h4>
+        <ul class="checklist">
+          <li><strong>Zero API Hallucination:</strong> Real data streams are distinctly tagged (LIVE / REPLAY / SIMULATION).</li>
+          <li><strong>Calibrated Monotonicity:</strong> PAVA isotonic calibration guarantees that higher forecast probability always corresponds to higher observed lightning frequency.</li>
+          <li><strong>Dual-Track AI:</strong> Rapid optical/Kalman tracking for immediate 0–30m trajectory combined with non-linear gradient-boosted decision trees for 30–60m convective intensification.</li>
+          <li><strong>SACHET / CAP 1.2:</strong> Native XML and JSON broadcast packages compliant with ITU-T X.1303 for automated mobile siren and SMS gateway dispatches.</li>
+        </ul>
       </div>
 
-      <!-- DDMA Specific Actions & Overview (TASK-V2-9.1) -->
-      <div id="ddma-actions" class="ddma-actions persona-ddma-only" style="display:none;margin-bottom:8px;">
-        <button id="btn-dispatch-cap" class="small-btn danger" style="width:100%;font-weight:700;margin-bottom:4px;">🚨 1-Click Broadcast CAP 1.2 to SACHET</button>
-        <label class="chk" style="font-size:11px;margin:2px 0;"><input type="checkbox" id="chk-audio-chime" checked /> 🔔 Audio Alert Chime (Web Audio Synthesizer)</label>
+      <!-- 4-Stage Fallback Ladder -->
+      <div class="card p-6">
+        <h3 class="card-title text-blue mb-3">🪜 4-Stage Graceful Degradation Ladder</h3>
+        <p class="text-slate-700 leading-relaxed mb-4">
+          Thunderstorm nowcasting must never crash when radar beams are blocked by terrain or satellite downlinks experience momentary packet loss. Vajra implements an automated 4-stage fallback ladder:
+        </p>
+
+        <div class="ladder-steps">
+          <div class="ladder-step rung-1">
+            <div class="rung-badge">RUNG 1 (PRIMARY)</div>
+            <div class="rung-title">Full Multi-Modal Fusion</div>
+            <div class="rung-desc">Doppler Radar (VIL/dBZ) + INSAT-3D Thermal IR + GLM/LIS Spaceborne Lightning + GFS Thermodynamics.</div>
+            <div class="rung-metric">Confidence: <strong>85%–95%</strong> · Resolution: <strong>High</strong></div>
+          </div>
+          <div class="ladder-step rung-2">
+            <div class="rung-badge">RUNG 2</div>
+            <div class="rung-title">Satellite-Primary Ladder</div>
+            <div class="rung-desc">Active in radar-sparse orographic zones (Himalayan / Northeast). Operates on INSAT-3D/3DR TIR + GLM flashes + GFS NWP.</div>
+            <div class="rung-metric">Confidence: <strong>65%–75%</strong> · Graceful degradation</div>
+          </div>
+          <div class="ladder-step rung-3">
+            <div class="rung-badge">RUNG 3</div>
+            <div class="rung-title">NWP &amp; Thermodynamic Proxy</div>
+            <div class="rung-desc">Triggered if satellite downlink drops. Computes lightning potential from GFS/NCUM CAPE, CIN, K-Index, and Lifted Index.</div>
+            <div class="rung-metric">Confidence: <strong>45%–55%</strong> · Macro-scale bounds</div>
+          </div>
+          <div class="ladder-step rung-4">
+            <div class="rung-badge">RUNG 4</div>
+            <div class="rung-title">Historical Climatology Baseline</div>
+            <div class="rung-desc">30-year monthly diurnal lightning flash density baseline. Fails safe without blanking operational screens.</div>
+            <div class="rung-metric">Confidence: <strong>25%–35%</strong> · Fail-safe baseline</div>
+          </div>
+        </div>
       </div>
-      <div id="ddma-summary-card" class="ddma-summary-card persona-ddma-only" style="display:none;">
-        <div style="font-weight:700;font-size:11px;margin-bottom:4px;">🛡️ DDMA Incident Response Overview</div>
-        <div id="ddma-impact-stats" style="font-size:11px;color:var(--text);">Analyzing active storm footprints…</div>
+    </div>
+
+    <!-- REST API Endpoints Table -->
+    <div class="card mt-6">
+      <div class="card-header">
+        <h3 class="card-title">REST API Endpoints Reference (FastAPI v0.1.0)</h3>
+        <a href="/docs" target="_blank" rel="noopener" class="text-link-btn">Interactive OpenAPI Swagger Docs &rarr;</a>
       </div>
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint Path</th>
+              <th>Response Payload Description</th>
+              <th>Operational Usage</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="http-get">GET</span></td>
+              <td><code>/api/v1/health</code></td>
+              <td>Service liveness status, server UTC timestamp, version string</td>
+              <td>Kubernetes / Container health probes</td>
+            </tr>
+            <tr>
+              <td><span class="http-get">GET</span></td>
+              <td><code>/api/v1/events</code></td>
+              <td>Catalog of replayable Indian severe squalls &amp; benchmark events</td>
+              <td>Replay scenario selection</td>
+            </tr>
+            <tr>
+              <td><span class="http-post">POST</span></td>
+              <td><code>/api/v1/replay/{event_id}/run</code></td>
+              <td>Runs the full nowcast pipeline, returning run summary and cycle counts</td>
+              <td>Inference replay execution</td>
+            </tr>
+            <tr>
+              <td><span class="http-get">GET</span></td>
+              <td><code>/api/v1/runs/{run_id}/forecasts</code></td>
+              <td>List of chronological forecast steps (+30m, +60m leads, probabilities)</td>
+              <td>Timeline scrubber animation</td>
+            </tr>
+            <tr>
+              <td><span class="http-get">GET</span></td>
+              <td><code>/api/v1/runs/{run_id}/scoreboard</code></td>
+              <td>Brier score, BSS, POD, FAR, CSI, and reliability calibration curve</td>
+              <td>Scientific validation audit</td>
+            </tr>
+            <tr>
+              <td><span class="http-get">GET</span></td>
+              <td><code>/api/v1/alerts?run_id={id}&amp;preset=operational</code></td>
+              <td>Active block-level warnings with population at risk and IMD color codes</td>
+              <td>DDMA civil defense broadcast</td>
+            </tr>
+            <tr>
+              <td><span class="http-get">GET</span></td>
+              <td><code>/api/v1/alerts/feed.atom</code></td>
+              <td>CAP 1.2 XML Syndicate Feed (ITU-T X.1303 standard)</td>
+              <td>Emergency broadcast integration (SACHET)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
 
-      <div id="alerts-list" class="alerts"><div class="muted">no alerts</div></div>
-    </section>
-
-    <section class="panel">
-      <h2>Data health</h2>
-      <div id="data-health" class="health"><span class="muted">—</span></div>
-    </section>
-
-    <section class="panel">
-      <h2>Legend</h2>
-      <div class="legend" id="legend-items"></div>
-      <div class="muted small">Bands are configurable defaults — not validated IMD operational thresholds.</div>
-    </section>
-  </aside>
 </main>
 
-<section id="verify-strip" aria-label="Forecast verification — this run versus observed flashes">
-  <span class="vs-label">VERIFY</span>
-  <span class="vs-scope muted small" id="vs-scope">run a replay to settle forecasts</span>
-  <div class="vs-numbers" id="vs-numbers" aria-live="polite"></div>
-  <svg id="vs-reliability" width="132" height="40" style="display:none;" role="img"></svg>
-  <button id="vs-audit" class="small-btn primary" style="margin-left:auto;">📊 Full audit</button>
-</section>
+<!-- ========================================== -->
+<!-- MODALS & OVERLAYS                          -->
+<!-- ========================================== -->
 
 <!-- Printable Emergency Bulletin Modal -->
 <div id="bulletin-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="modal-bulletin-title">
@@ -230,8 +681,8 @@
     </div>
     <div class="modal-footer">
       <button class="small-btn primary" id="btn-print-bulletin">🖨️ Print / Save as PDF</button>
-      <button class="small-btn" id="btn-copy-cap-xml">📋 Copy CAP XML</button>
-      <button class="small-btn" id="btn-copy-cap-json">📋 Copy CAP JSON</button>
+      <button class="small-btn outline-btn" id="btn-copy-cap-xml">📋 Copy CAP XML</button>
+      <button class="small-btn outline-btn" id="btn-copy-cap-json">📋 Copy CAP JSON</button>
       <button class="small-btn" id="bulletin-modal-dismiss" aria-label="Close dialog">Close</button>
     </div>
   </div>
@@ -254,62 +705,62 @@
   </div>
 </div>
 
-<!-- Keyboard Shortcuts Cheat-Sheet Modal (Phase P7) -->
+<!-- Keyboard Shortcuts Cheat-Sheet Modal -->
 <div id="shortcuts-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="modal-shortcuts-title">
-  <div class="modal-dialog" style="max-width: 520px;">
+  <div class="modal-dialog" style="max-width: 540px;">
     <div class="modal-header">
-      <h3 id="modal-shortcuts-title">⌨ Presentation &amp; Rehearsal Shortcuts</h3>
+      <h3 id="modal-shortcuts-title">⌨ Presentation &amp; Operational Shortcuts</h3>
       <button class="close-btn" id="shortcuts-modal-close" aria-label="Close modal">&times;</button>
     </div>
     <div class="modal-body">
-      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <table class="shortcuts-table">
         <thead>
-          <tr style="border-bottom:1px solid var(--panel-edge); text-align:left;">
-            <th style="padding:6px 8px; color:var(--text-strong);">Key</th>
-            <th style="padding:6px 8px; color:var(--text-strong);">Action</th>
-            <th style="padding:6px 8px; color:var(--muted);">Demo Target</th>
+          <tr>
+            <th>Key</th>
+            <th>Action</th>
+            <th>Target</th>
           </tr>
         </thead>
         <tbody>
-          <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-            <td style="padding:6px 8px;"><kbd>1</kbd>–<kbd>8</kbd></td>
-            <td style="padding:6px 8px;">Jump to Demo Moment 1 through 8</td>
-            <td style="padding:6px 8px; color:var(--muted);">Sequencer</td>
-          </tr>
-          <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-            <td style="padding:6px 8px;"><kbd>[</kbd> / <kbd>]</kbd></td>
-            <td style="padding:6px 8px;">Previous / Next demo moment</td>
-            <td style="padding:6px 8px; color:var(--muted);">Clicker</td>
-          </tr>
-          <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-            <td style="padding:6px 8px;"><kbd>R</kbd></td>
-            <td style="padding:6px 8px;">Reset to Step 1 canonical strike (storm zoom)</td>
-            <td style="padding:6px 8px; color:var(--muted);">Recovery</td>
-          </tr>
-          <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-            <td style="padding:6px 8px;"><kbd>Space</kbd></td>
-            <td style="padding:6px 8px;">Play / Pause cycle playback</td>
-            <td style="padding:6px 8px; color:var(--muted);">Timeline</td>
-          </tr>
-          <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-            <td style="padding:6px 8px;"><kbd>←</kbd> / <kbd>→</kbd></td>
-            <td style="padding:6px 8px;">Step -1 / +1 forecast cycle</td>
-            <td style="padding:6px 8px; color:var(--muted);">Timeline</td>
-          </tr>
-          <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-            <td style="padding:6px 8px;"><kbd>Home</kbd> / <kbd>End</kbd></td>
-            <td style="padding:6px 8px;">Jump to Start (T0) / Peak threat cycle</td>
-            <td style="padding:6px 8px; color:var(--muted);">Timeline</td>
-          </tr>
-          <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-            <td style="padding:6px 8px;"><kbd>Esc</kbd></td>
-            <td style="padding:6px 8px;">Close active modal / Dismiss overlays</td>
-            <td style="padding:6px 8px; color:var(--muted);">General</td>
+          <tr>
+            <td><kbd>1</kbd>–<kbd>8</kbd></td>
+            <td>Jump to Demo Moment 1 through 8</td>
+            <td>Sequencer</td>
           </tr>
           <tr>
-            <td style="padding:6px 8px;"><kbd>?</kbd></td>
-            <td style="padding:6px 8px;">Toggle this keyboard shortcuts reference</td>
-            <td style="padding:6px 8px; color:var(--muted);">Help</td>
+            <td><kbd>[</kbd> / <kbd>]</kbd></td>
+            <td>Previous / Next demo moment</td>
+            <td>Clicker</td>
+          </tr>
+          <tr>
+            <td><kbd>R</kbd></td>
+            <td>Reset to Step 1 canonical strike (storm zoom)</td>
+            <td>Recovery</td>
+          </tr>
+          <tr>
+            <td><kbd>Space</kbd></td>
+            <td>Play / Pause cycle playback</td>
+            <td>Timeline</td>
+          </tr>
+          <tr>
+            <td><kbd>&larr;</kbd> / <kbd>&rarr;</kbd></td>
+            <td>Step -1 / +1 forecast cycle</td>
+            <td>Timeline</td>
+          </tr>
+          <tr>
+            <td><kbd>Home</kbd> / <kbd>End</kbd></td>
+            <td>Jump to Start (T0) / Peak threat cycle</td>
+            <td>Timeline</td>
+          </tr>
+          <tr>
+            <td><kbd>Esc</kbd></td>
+            <td>Close active modal / Dismiss overlays</td>
+            <td>General</td>
+          </tr>
+          <tr>
+            <td><kbd>?</kbd></td>
+            <td>Toggle this keyboard shortcuts reference</td>
+            <td>Help</td>
           </tr>
         </tbody>
       </table>
@@ -327,9 +778,10 @@
     Every forecast carries its data mode (LIVE / REPLAY / SIMULATION), the model rung actually used,
     and its input health. Nothing on this map is simulated unless labelled.
   </span>
+  <span class="footer-tag">India Meteorological Department · Ministry of Earth Sciences · SIH 2026 PS 26072</span>
 </footer>
 
-<script src="/vendor/maplibre-gl.js?v=3"></script>
-<script src="/app.js?v=3"></script>
+<script src="/vendor/maplibre-gl.js?v=4"></script>
+<script src="/app.js?v=4"></script>
 </body>
 </html>
